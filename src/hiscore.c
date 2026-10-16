@@ -1,48 +1,13 @@
 #include "hiscore.h"
 
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "tp.h"
 
 hiscore_t hiscores[HISCORE_COUNT + 1];
 
 #define RECORD_BYTES 0x106
-
-/* Turbo Pascal 6-byte Real: byte 0 exponent (bias 129, 0 = zero), bytes 1-5 mantissa with an
- * implied leading 1, top bit of byte 5 the sign. */
-static double real48_decode(const unsigned char *b)
-{
-    if (b[0] == 0)
-        return 0.0;
-    double m = 1.0;
-    const unsigned char mant[5] = {(unsigned char)(b[5] & 0x7F), b[4], b[3], b[2], b[1]};
-    for (int i = 0; i < 5; i++)
-        m += mant[i] / pow(2.0, 7 + 8 * i);
-    return (b[5] & 0x80 ? -m : m) * pow(2.0, b[0] - 129);
-}
-
-static void real48_encode(double v, unsigned char *b)
-{
-    memset(b, 0, 6);
-    if (v == 0.0)
-        return;
-    const int neg = v < 0;
-    if (neg)
-        v = -v;
-    int e;
-    double m = frexp(v, &e) * 2.0; /* 1 <= m < 2 */
-    e -= 1;
-    b[0] = (unsigned char)(e + 129);
-    m -= 1.0;
-    unsigned long long bits = (unsigned long long)(m * (double)(1ULL << 39) + 0.5); /* 39 bits */
-    b[5] = (unsigned char)((bits >> 32) & 0x7F);
-    b[4] = (unsigned char)(bits >> 24);
-    b[3] = (unsigned char)(bits >> 16);
-    b[2] = (unsigned char)(bits >> 8);
-    b[1] = (unsigned char)bits;
-    if (neg)
-        b[5] |= 0x80;
-}
 
 static void hs_path(const gamedata_t *g, char *out, size_t len, int upper)
 {
@@ -83,7 +48,7 @@ void hiscore_load(const gamedata_t *g)
             ok = 0;
             break;
         }
-        loaded[i].score = real48_decode(rec);
+        loaded[i].score = tp_real48_decode(rec);
         memcpy(loaded[i].name, rec + 7, rec[6]);
         loaded[i].name[rec[6]] = '\0';
     }
@@ -114,7 +79,7 @@ void hiscore_save(const gamedata_t *g)
     for (int i = 1; i <= HISCORE_COUNT; i++) {
         unsigned char rec[RECORD_BYTES];
         memset(rec, 0, sizeof rec);
-        real48_encode(hiscores[i].score, rec);
+        tp_real48_encode(hiscores[i].score, rec);
         const size_t n = strlen(hiscores[i].name);
         rec[6] = (unsigned char)(n < 255 ? n : 255);
         memcpy(rec + 7, hiscores[i].name, rec[6]);

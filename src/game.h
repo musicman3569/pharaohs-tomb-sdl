@@ -31,6 +31,18 @@ typedef struct {
     bool restored;         /* [796E] skip restoring counters on the next StartLevel */
     int key_layout;        /* [8101] PTOMB.CFG byte: '1' Shift, '2' Alt/Ctrl, '3' Ctrl/Alt */
 
+    /* SnapshotForSave (1000:1C1F) copies these at the start of every StartLevel, so S saves
+     * the state the current level began with, not the state at the moment of saving. */
+    struct {
+        int level;         /* [7590] */
+        int t_count;       /* [7592] */
+        int treasure;      /* [7594] */
+        int lives;         /* [7596] */
+        int spears;        /* [7598] */
+        double score;      /* [759A] 6-byte Real */
+        bool life_bonus_taken; /* [75A0] */
+    } snap;
+
     /* Player */
     int px, py;            /* [74DC] [74DE]  py is the bottom row */
     int frame;             /* [74DA] 1..4 */

@@ -411,6 +411,11 @@ GameTick (1000:4f69), once per frame
 | 795D      | cheat mode (invincible, unlimited spears)|
 | 795E      | player invisible (300 ticks, [75F2])    |
 | 7982      | score (6-byte TP Real, 7982-7987)       |
+| 757E-758E | save record (17 bytes, see Save and restore) |
+| 7590-75A0 | SnapshotForSave copy taken by StartLevel |
+| 75F8/75FA/75FC | T count / treasure / spears restored by StartLevel |
+| 796B      | hidden extra life taken                 |
+| 796E      | restored: StartLevel keeps the counters |
 | 7977-797B | Ctrl, Alt, LShift, RShift, ScrollLock   |
 | 7963      | quit-to-menu flag                       |
 | 7964      | game-over flag                          |
@@ -428,7 +433,7 @@ GameTick (1000:4f69), once per frame
 | `PTOMB.CFG`   | 1     | config byte (default '3')                  |
 | `PTOMBn.HS`   | 1310  | high scores, 5 x 262-byte records          |
 | `PTOMBn.MNU`  | 5722  | title/menu screen, PCX 320x200x4           |
-| `PTOMBn.SAV`  | 17    | saved game                                 |
+| `PTOMBn.SAV`  | 17    | saved game (see Save and restore)          |
 
 ## The port (src/)
 
@@ -485,7 +490,7 @@ vertical hazards, elevators and bats moving (levels 2, 3, 5, 9). On level 16, a 
 right-hand walker (+250) and the left one kills the player. Freeze and the dart traps are ported
 but haven't been exercised in a scripted run yet.
 
-Not done yet: save/restore (S/R in game, 1000:5E20 / 5F3B), the joystick, the volume ending
+Not done yet: the joystick, the volume ending
 (1854:4E01), the text-mode exit screen (1854:60C8), and the Genus transition effects (approximated).
 The glint off-by-one (entry 0 at (0, 0)) is kept on purpose.
 
@@ -557,3 +562,42 @@ DrawFrame(2, 2, 38, 24, colour 1), Delay(60); record 1 = (score, `~|!+`); bubble
 ShowHighScores(0); GotoXY(18, 15 + `[75CC]`); ReadLine(max 20) (1854:570D: characters 20h-7Fh are
 appended and echoed raw, so they show in the ROM font; backspace writes 8, space, 8; Enter ends;
 an extended key's scancode byte gets appended too); UpCase (1854:5835); save (1854:6794).
+
+## Save and restore
+
+In game, **S** saves and **R** restores (GameTick, 1000:5262 / 5273, after `UpCase`). One save
+per volume, `<base>.SAV`, a Pascal typed file of one 17-byte record at DS:757E:
+
+| Offset | Type | Field | From |
+|--------|------|-------|------|
+| 00 | Integer | level (1..20) | [75D0] |
+| 02 | Integer | T collectibles | [75EC] |
+| 04 | Integer | treasure | [75E6] |
+| 06 | Integer | lives | [75E4] |
+| 08 | Integer | spears | [75E2] |
+| 0A | Real (6 bytes) | score | [7982] |
+| 10 | Boolean | hidden extra life taken | [796B] |
+
+The user's files decode as volume 1 level 20, 3 T, 87 treasure, 1 life, 5 spears, 951,000 points,
+and volume 2 level 3, 3 T, 40 treasure, 3 lives, 1 spear, 20,150 points.
+
+- **SnapshotForSave (1000:1C1F)** is the first thing StartLevel does: it copies those seven values
+  to DS:7590-75A0. **SaveGame writes that snapshot, not the live values**, so S saves the state
+  the current level began with (after a death, the restarted level, so the lost life counts).
+- **SaveGame (1000:5E20)**: ClearStatusLine, "SAVING GAME..." (DrawTextCentered(1, 25)),
+  Delay(18), snapshot -> record, `Assign(f, base + '.SAV')`, Rewrite, Reset, Write, Close, all
+  without I/O checks, then ClearStatusLine and DrawStatusBar.
+- **RestoreGame (1000:5F3B)**: ClearStatusLine, "RESTORING GAME...", Delay(18), `Assign(f, base +
+  '.sav')` (lower case here), Reset with `{$I-}` and IOResult. If that fails: "SAVE FILE NOT ON
+  DISK. PRESS ANY KEY.", wait for KeyPressed (the key is left in the buffer for GameTick to act
+  on), ClearStatusLine, and return **without redrawing the status bar**. Otherwise Close, then
+  Assign / Reset / Read / Close again with I/O checks on (a short file would be a runtime error),
+  copy the record into the live variables, set `[796E]` = 1, DrawStatusBar, StartLevel(level).
+- `[796E]` makes StartLevel keep the restored T count, spears and treasure instead of loading the
+  level-start copies `[75F8]` / `[75FC]` / `[75FA]`, then clears itself. **Those copies are not
+  updated by a restore**, so dying on a restored level brings back the counters from the last
+  level entered normally in this session (or ResetGameState's). Kept in the port.
+- The port reads and writes whichever of `ptombN.SAV`, `ptombN.sav`, `PTOMBN.SAV` exists next to
+  the EXE (SaveGame's spelling otherwise). Verified: restoring both of the user's saves and saving
+  again gives byte-identical files; saving on volume 1 level 3 writes `03 00 00 00 00 00 04 00
+  02 00` + a zero Real + `00`.

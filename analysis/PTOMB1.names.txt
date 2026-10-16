@@ -86,8 +86,8 @@
 1000:4dd4 PlayerJump                # Space / joystick button 1: start a jump
 1000:4df0 PlayerFire                # throw spear (a line); spears-1, refunded if cheat [795D]
 1000:3b2d TouchTile                 # (y, x) switch on tile map code; probed at 9 points around the player
-1000:5e20 SaveGame_guess            # 'S' in game
-1000:5f3b RestoreGame_guess         # 'R' in game
+1000:5e20 SaveGame                  # 'S' in game: snapshot -> <base>.SAV (17 bytes)
+1000:5f3b RestoreGame               # 'R' in game: <base>.sav -> state, StartLevel
 1854:1330 ClearStatusLine           # 39 spaces at (1,25)
 1854:1446 DrawTextCentered          # (color, row, s) A-Z remapped +41h into the INT 1Fh font
 
@@ -131,7 +131,7 @@
 # 1854:0000 Delay(ticks), busy-wait on [7F74] (no Ghidra function there yet; create one to name it)
 1854:06a5 ShowLevelTitle            # (level) level name, wait 48-level ticks or a key
 1854:1017 FlushKeyboard
-1000:1c1f SnapshotForSave           # copies level/score/counters for the S key
+1000:1c1f SnapshotForSave           # StartLevel copies level/score/counters to DS:7590 for S
 1854:58a7 SfxDart                   # Sound(500), Delay(1), NoSound
 1854:58d2 SfxPickup                 # SoundSweep 500..2000 step 10, no delays (CPU-speed chirp)
 1854:592f SfxBonus                  # SoundSweep 10..3000 step 750, staccato

@@ -120,6 +120,9 @@ Verified (by scripted runs, screenshots, recordings or byte comparison):
   menu, 4 instruction pages, story page 1, ordering info, config keyboard, high scores (reading
   the user's real `PTOMB1.HS`). E plays, Q+Y returns to the menu, Q exits.
 - High-score entry and save on a **temp copy**: the file round-trips as 5 x 262-byte records.
+- Save/restore on temp copies: R loads the user's `PTOMB1.SAV` (level 20, 951,000) and
+  `PTOMB2.SAV`; S then rewrites them byte-identically; a missing file shows the original's
+  message. Not exercised: dying after a restore (the stale level-start counters quirk).
 - Locators (`--debug-exe`) work on all four volumes; the game unit's offsets match in all four.
 
 Assumed / unverified (check in DOSBox when possible):
@@ -134,20 +137,17 @@ Assumed / unverified (check in DOSBox when possible):
 
 ## Outstanding issues and known gaps
 
-- Not ported: in-game **save/restore** (S/R: 1000:5E20 / 5F3B, `PTOMBn.SAV`, 17 bytes;
-  SnapshotForSave 1000:1C1F copies level / T count / lives / spears / treasure / score / `[796B]`);
-  the **volume ending** (1854:4E01, ~1200 instructions; a placeholder "VOLUME COMPLETE" screen
+- Not ported: the **volume ending** (1854:4E01, ~1200 instructions; a placeholder "VOLUME COMPLETE" screen
   stands in); the joystick; the text-mode exit screen (1854:60C8); StartLevel's 2714:095C
   Randomize (approximated by reseeding).
 - The port **writes into the EXE's folder** (`PTOMBn.HS` on a new high score, `PTOMB.cfg` from
-  Config Keyboard), as the original does. Test against a copy (see below).
+  Config Keyboard, `PTOMBn.SAV` on S), as the original does. Test against a copy (see below).
 - Delay is `plat_delay` (ticks, U:0000), which can't be named in Ghidra because no function is
   defined there.
 
 ## Next steps (suggested order)
 
-1. **Save/restore**: decompile 1000:5E20, 5F3B and 1C1F, decode the 17-byte `.SAV` (the user
-   has `PTOMB1.SAV` and `PTOMB2.SAV` to test compatibility against), port into `game.c`.
+1. ~~Save/restore~~: done (`notes.md`, "Save and restore"); restores the user's own saves.
 2. **Volume ending** 1854:4E01: probably text screens plus animation; check whether
    `screenvm` can run it before hand-porting.
 3. Optional: decode the Genus effect jump table for exact transitions; joystick via SDL

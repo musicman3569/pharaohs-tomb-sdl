@@ -974,6 +974,115 @@ static void wait_any_key(const char *msg)
     draw_status_bar();
 }
 
+/* ------------------------------------------------------------------------------------------ */
+/* Save and restore: <base>.SAV, one 17-byte record (DS:757E)                                 */
+
+#define SAVE_BYTES 0x11
+
+/* The path of the save file. SaveGame names it '<base>.SAV' and RestoreGame '<base>.sav', which
+ * is the same file on DOS. Use whichever spelling already exists (including an upper-case
+ * PTOMBn.SAV) so case-sensitive file systems still find it; otherwise SaveGame's. */
+static void save_path(char *out, size_t len)
+{
+    char name[3][32];
+    snprintf(name[0], sizeof name[0], "%s.SAV", G.data->base_name);
+    snprintf(name[1], sizeof name[1], "%s.sav", G.data->base_name);
+    snprintf(name[2], sizeof name[2], "%s", name[0]);
+    for (char *c = name[2]; *c; c++)
+        if (*c >= 'a' && *c <= 'z')
+            *c = (char)(*c - 32);
+    for (int i = 0; i < 3; i++) {
+        snprintf(out, len, "%s%s", G.data->dir, name[i]);
+        FILE *f = fopen(out, "rb");
+        if (f) {
+            fclose(f);
+            return;
+        }
+    }
+    snprintf(out, len, "%s%s", G.data->dir, name[0]);
+}
+
+/* SaveGame (1000:5E20), the S key */
+static void save_game(void)
+{
+    text_clear_status_line();
+    text_draw_centered(1, 25, "SAVING GAME...");
+    plat_delay(18);
+
+    /* The record is the snapshot taken when this level started. */
+    unsigned char rec[SAVE_BYTES];
+    const int words[5] = {G.snap.level, G.snap.t_count, G.snap.treasure, G.snap.lives,
+                          G.snap.spears};
+    for (int i = 0; i < 5; i++) {
+        rec[i * 2] = (unsigned char)(words[i] & 0xFF);
+        rec[i * 2 + 1] = (unsigned char)((words[i] >> 8) & 0xFF);
+    }
+    tp_real48_encode(G.snap.score, rec + 10);
+    rec[16] = G.snap.life_bonus_taken;
+
+    /* Assign, Rewrite, Reset, Write, Close, with no I/O check: a failure goes unnoticed. */
+    char path[640];
+    save_path(path, sizeof path);
+    FILE *f = fopen(path, "wb");
+    if (f) {
+        fwrite(rec, 1, sizeof rec, f);
+        fclose(f);
+    } else {
+        fprintf(stderr, "ptomb: can't write %s\n", path);
+    }
+
+    text_clear_status_line();
+    draw_status_bar();
+}
+
+/* A Pascal Integer from the record */
+static int save_word(const unsigned char *rec, int off)
+{
+    return (int16_t)(rec[off] | rec[off + 1] << 8);
+}
+
+/* RestoreGame (1000:5F3B), the R key */
+static void restore_game(void)
+{
+    text_clear_status_line();
+    text_draw_centered(1, 25, "RESTORING GAME...");
+    plat_delay(18);
+
+    char path[640];
+    save_path(path, sizeof path);
+    unsigned char rec[SAVE_BYTES];
+    FILE *f = fopen(path, "rb");
+    /* Only opening the file is checked (IOResult). A short file would stop the original with
+     * a runtime error; the port treats it as missing instead. */
+    const bool ok = f && fread(rec, 1, sizeof rec, f) == sizeof rec;
+    if (f)
+        fclose(f);
+    if (!ok) {
+        text_clear_status_line();
+        text_draw_centered(1, 25, "SAVE FILE NOT ON DISK. PRESS ANY KEY.");
+        while (!plat_key_pressed() && !plat_quitting())
+            plat_poll();
+        /* The key is left for GameTick, and the status bar isn't redrawn: it stays blank until
+         * something else draws it. Both as in the original. */
+        text_clear_status_line();
+        return;
+    }
+
+    G.level = save_word(rec, 0);
+    G.t_count = save_word(rec, 2);
+    G.lives = save_word(rec, 6);
+    G.spears = save_word(rec, 8);
+    G.treasure = save_word(rec, 4);
+    G.score = tp_real48_decode(rec + 10);
+    G.life_bonus_taken = rec[16] != 0;
+    /* StartLevel then keeps these instead of resetting them to the level-start values. Those
+     * ([75F8]-[75FC]) aren't updated, so dying on the restored level brings back the spears,
+     * T count and treasure from whatever level was last entered normally. Kept. */
+    G.restored = true;
+    draw_status_bar();
+    game_start_level(G.level);
+}
+
 void game_tick(void)
 {
     level_t *lv = &G.lv;
@@ -1044,7 +1153,10 @@ void game_tick(void)
         }
         if (upcase(G.last_key) == 'P')
             wait_any_key("GAME PAUSED - PRESS ANY KEY");
-        /* 'S' / 'R' save and restore: not ported yet */
+        if (upcase(G.last_key) == 'S')
+            save_game();
+        if (upcase(G.last_key) == 'R')
+            restore_game();
         if (upcase(G.last_key) == 'E') {
             G.sound_on = !G.sound_on;
             wait_any_key(G.sound_on ? "SOUND EFFECTS ON" : "SOUND EFFECTS OFF");
@@ -1167,8 +1279,22 @@ static void show_level_title(int level)
     g3_graph_color_mode();
 }
 
+/* SnapshotForSave (1000:1C1F). It copies [75D0]; every caller of StartLevel has already stored
+ * the new level there (the port's PgUp / PgDn and PlayGame haven't), so take the argument. */
+static void snapshot_for_save(int level)
+{
+    G.snap.level = level;
+    G.snap.t_count = G.t_count;
+    G.snap.lives = G.lives;
+    G.snap.spears = G.spears;
+    G.snap.treasure = G.treasure;
+    G.snap.score = G.score;
+    G.snap.life_bonus_taken = G.life_bonus_taken;
+}
+
 void game_start_level(int level)
 {
+    snapshot_for_save(level);
     g3_graph_color_mode();
     text_draw_frame(G.data, 3, 5, 10, 35, 14);
     text_select_font(G.data, FONT_GAME); /* 1854:10A3 */

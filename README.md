@@ -31,12 +31,13 @@ in the original, using the game's own fonts from the EXE plus the port's own 8x8
 plain ASCII (standing in for the IBM BIOS font, which can't be shipped). It **starts like the
 original**: the title picture and walking demo, then the main menu with instructions, story,
 ordering info, keyboard setup, joystick screen and high scores (read from and saved to the
-game's own `PTOMBn.HS`, so existing scores carry over). Not yet: saving games, the joystick
+game's own `PTOMBn.HS`, so existing scores carry over). Saving and restoring games (S / R) works with the original's `.SAV` files. Not yet: the joystick
 itself, the end-of-volume sequence, and the exact Genus picture-transition effects
 (approximated as wipes).
 
-The port reads `PTOMBn.MNU`, `PTOMBn.HS` and `PTOMB.CFG` from the folder the EXE is in, and
-**writes** `PTOMBn.HS` (a new high score) and `PTOMB.CFG` (Config Keyboard) there, as the
+The port reads `PTOMBn.MNU`, `PTOMBn.HS`, `PTOMBn.SAV` and `PTOMB.CFG` from the folder the EXE is in, and
+**writes** `PTOMBn.HS` (a new high score), `PTOMB.CFG` (Config Keyboard) and `PTOMBn.SAV`
+(S in game) there, as the
 original does.
 
 ### Build (Windows, MSYS2 mingw64)
@@ -70,6 +71,7 @@ Game keys (the original's):
 | Space | jump |
 | Z X C V B N M , . / F | throw a spear |
 | P | pause |
+| S / R | save / restore (the save holds the state the current level started with) |
 | E | sound effects on/off |
 | Q or Esc, then Y | quit to the main menu |
 | Scroll Lock on + `+` | cheat: skip to the next level |
