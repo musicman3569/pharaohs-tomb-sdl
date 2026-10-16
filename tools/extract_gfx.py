@@ -3,8 +3,8 @@
 title screen (a PCX file).
 
 Usage:
-  python extract_gfx.py sprites UNPACKED.EXE OUTDIR [--bright]
-  python extract_gfx.py pcx FILE.MNU OUT.png [--bright]
+  python extract_gfx.py sprites UNPACKED.EXE OUTDIR [--palette 0|1] [--bright]
+  python extract_gfx.py pcx FILE.MNU OUT.png [--palette 0|1] [--bright]
 
 Sprite format (Turbo Pascal Graph3 GetPic buffer):
   word mode (2 = 320x200 4-colour), word width, word height,
@@ -26,10 +26,16 @@ SETS = 40
 FRAMES = 4
 SLOT = 0x9C
 
-# CGA palette 1 (cyan / magenta / white). The game selects it with INT 10h AH=0Bh BX=0100h
-# and leaves intensity off; the MNU PCX header says the same (byte 19 = 0x40).
-PALETTE_DIM = [(0, 0, 0), (0x00, 0xAA, 0xAA), (0xAA, 0x00, 0xAA), (0xAA, 0xAA, 0xAA)]
-PALETTE_BRIGHT = [(0, 0, 0), (0x55, 0xFF, 0xFF), (0xFF, 0x55, 0xFF), (0xFF, 0xFF, 0xFF)]
+# CGA palettes, indexed [palette][bright]. The game itself uses palette 1 (cyan / magenta /
+# white): it selects it with INT 10h AH=0Bh BX=0100h and leaves intensity off, and the MNU PCX
+# header says the same (byte 19 = 0x40). Palette 0 (green / red / brown) is offered as an
+# alternative look.
+PALETTES = {
+    (0, False): [(0, 0, 0), (0x00, 0xAA, 0x00), (0xAA, 0x00, 0x00), (0xAA, 0x55, 0x00)],
+    (0, True): [(0, 0, 0), (0x55, 0xFF, 0x55), (0xFF, 0x55, 0x55), (0xFF, 0xFF, 0x55)],
+    (1, False): [(0, 0, 0), (0x00, 0xAA, 0xAA), (0xAA, 0x00, 0xAA), (0xAA, 0xAA, 0xAA)],
+    (1, True): [(0, 0, 0), (0x55, 0xFF, 0xFF), (0xFF, 0x55, 0xFF), (0xFF, 0xFF, 0xFF)],
+}
 GAP = 4  # palette index for grid lines in contact sheets
 GAP_RGB = (0x30, 0x30, 0x30)
 
@@ -203,10 +209,12 @@ def main():
     pp.add_argument("pcx")
     pp.add_argument("out")
     for p in (sp, pp):
-        p.add_argument("--bright", action="store_true", help="use the high-intensity CGA palette")
+        p.add_argument("--palette", type=int, choices=(0, 1), default=1,
+                       help="CGA palette: 1 = cyan/magenta/white (the game's own), 0 = green/red/brown")
+        p.add_argument("--bright", action="store_true", help="use the high-intensity colours")
         p.add_argument("--zoom", type=int, default=None, help="pixel scale (default 4 sprites, 2 pcx)")
     args = ap.parse_args()
-    palette = PALETTE_BRIGHT if args.bright else PALETTE_DIM
+    palette = PALETTES[(args.palette, args.bright)]
 
     if args.cmd == "sprites":
         extract_sprites(args.exe, args.outdir, palette, args.zoom or 4)

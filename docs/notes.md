@@ -46,6 +46,8 @@ length-prefixed. Segment map:
 - Full-screen images (`PTOMBn.MNU`) are **PCX** files (v5, 320x200, 2 bpp, 80 bytes/line,
   palette byte 0x40 = palette 1, low intensity). They decode with no trailing bytes.
 - Extract everything with `tools/extract_gfx.py` (output goes to `gfx/`, not committed).
+  `--palette 0` renders in CGA palette 0 (green/red/brown) instead of the game's palette 1;
+  that's the preferred look for this project, so the port should offer it as an option.
 
 ### Sprite set -> BSS address
 
