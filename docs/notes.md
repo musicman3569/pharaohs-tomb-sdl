@@ -307,8 +307,7 @@ DrawTextAt(12, 12, "G A M E   O V E R"), then the big frame and Delay(36).
 
 The port's `text.c` emulates the BIOS cell output and ports these routines. `gamedata.c` reads
 the five fonts and this volume's level names from the EXE by pattern. `font8x8.c` is the port's
-own original font for 20h-7Eh (see `gfx/fonts/port_font.png` after running the font sheet
-script, or the ASCII art in the source).
+own original font for 20h-7Eh, drawn as ASCII art in the source.
 
 ## Sound effects
 
