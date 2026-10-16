@@ -84,7 +84,7 @@
 1854:59be DrawLevelMonster          # (y, x, frame, level) per-level sprite for s/S tiles
 1000:1fa0 MoveEnemies               # per tick: one branch per enemy type 1..10
 1000:4dd4 PlayerJump_guess          # Space / joystick button 1
-1000:4df0 PlayerFire_guess          # joystick button 2 / fire keys, needs [75e2] > 0
+1000:4df0 PlayerFire                # throw spear (a line); spears-1, refunded if cheat [795D]
 1000:3b2d TouchTile                 # (y, x) switch on tile map code; probed at 9 points around the player
 1000:5e20 SaveGame_guess            # 'S' in game
 1000:5f3b RestoreGame_guess         # 'R' in game
@@ -100,7 +100,7 @@
 # --- Enemy helpers (from MoveEnemies) ---
 1000:1c87 Between_guess             # Pascal (v, lo, hi): lo <= v <= hi
 1000:1cb0 TouchesPlayer_guess       # box overlap with the player
-1000:34c3 KillPlayer_guess
+1000:34c3 KillPlayer                # death anim (set 19), lives-1 (refunded if cheat [795D]); <0 -> game over
 1000:1e47 EnemyBlocked_guess        # path ahead blocked (walls / other enemies)
 1000:1c60 AnimateEnemy_guess        # advance frame index (slot +0) 1..4
 1000:35a2 DrawPlayer_guess
@@ -116,3 +116,8 @@
 1000:00b9 PlayArtifactSound_guess
 1854:15f0 PlaySoundEffect_guess     # many tone/duration args
 20f5:000b Dos_Intr
+
+# --- Cheat / player movement ---
+1000:3ad7 CheatSkipLevel            # in game: Scroll Lock + '+', next level (<= 20), +1000
+1000:3844 PlayerWalk                # (dx) pixel-checked step; picks walk/turn sprite
+1000:3612 PlayerJumpStep            # (dy) one jump/fall step with rising-pitch beep

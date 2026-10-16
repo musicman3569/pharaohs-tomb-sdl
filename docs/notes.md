@@ -140,7 +140,7 @@ flag `[7964]` is set. "Erase" means the cell is cleared to 0 and overwritten wit
 | 0C/0E/10 | `1` `2` `3` | **switch** (11/2) | erase, then every cell with code+1 (0D/0F/11) **builds a brick** (set 16 frames 3->0). Bricks are solid because collision reads pixels | 100 |
 | 0D/0F/11 | `4` `5` `6` | **invisible brick spots** | targets of switches 1/2/3 | |
 | 12 | `7` | **brick with hidden treasure** | flashes a gem, treasure +5, brick stays | 5 x 50 |
-| 13 | `i` | **invisible transform trigger** | erase, sound; player drawn from **set 17** for 300 steps (`[795E]`, `[75F2]`; purpose not confirmed, level 17 starts this way) | |
+| 13 | `i` | **hidden invisibility trap** | erase, sound; the **player turns invisible** for 300 timer ticks (~16.5 s): `[795E]`=1, timer `[75F2]`. Only the shadow line (set 17) is drawn. Purely visual: enemies and spikes still kill. Level 17 starts with the player invisible | |
 | 14 | `T` | **"T" collectible** (14/0) | erase, T count `[75EC]` +1; 5 of them -> 50,000 and reset | 1,000 |
 | 15 | `F` | **freeze** (12/3) | erase, `[7968]` = 1: all enemies stop for 3000 steps | 1,000 |
 | 16 | `8` | **brick with hidden treasure** | treasure +10 | 10 x 50 |
@@ -203,6 +203,16 @@ Same table in all four volumes:
 |-------|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|
 | Set   | 31 | 27 | 24 | 25 | 26 | 23 | 28 | 29 | 30 | 39 | 32 | 33 | 31 | 34 | 19 | 35 | 36 | 37 | 38 | 22 |
 
+## Cheats
+
+Both are gated on **Scroll Lock** being on, which `ReadShiftKeys` (INT 16h AH=02h, bit 4)
+copies into `[797B]`. `+` is read through Crt `ReadKey`, so either `+` key works.
+
+| Where | Keys | Effect |
+|-------|------|--------|
+| Main menu | Scroll Lock on, `+` | `[795D]` = 1, then start the game. **Invincible + unlimited spears**: `KillPlayer` takes a life and then gives it back, and `PlayerFire` does the same with the spear. Dying still plays the death animation and restarts the level. `ResetGameState` clears the flag, so it lasts for one game. |
+| In game | Scroll Lock on, `+` | `CheatSkipLevel` (1000:3AD7): if level < 20, carry spears / T count / treasure over like a normal exit, +1,000 points, start the next level. Works with or without cheat mode. |
+
 ## Hardware hooks (what the port replaces)
 
 | Hook                  | Where              | Behaviour                                                |
@@ -229,7 +239,7 @@ main (1000:8473)
   LoadConfig                             PTOMB.CFG: 1 byte, default '3'
   TitleScreen                            shows PTOMB1.MNU (PCX) + credits
   MainMenu loop
-    E/Space/Enter -> PlayGame            + with Scroll Lock on -> [795D]=1, PlayGame (cheat? unexplored)
+    E/Space/Enter -> PlayGame            + with Scroll Lock on -> cheat mode, PlayGame (see Cheats)
     I Instructions  S Story  H HighScores  C ConfigKeyboard  J JoystickMenu
     O OrderingInfo  Q quit
   RestoreKeyboardISR
@@ -245,7 +255,7 @@ GameTick (1000:4f69), once per frame
   gravity via GetDotColor below the player
   joystick buttons -> jump / fire
   keys: Space jump, P pause, S save, R restore, E sound on/off, Q/Esc quit prompt,
-        + with Scroll Lock on -> 1000:3AD7 (unexplored)
+        + with Scroll Lock on -> CheatSkipLevel (see Cheats)
   PlayerMoveHorizontal: ISR arrow flags, or Shift/Ctrl/Alt (ReadShiftKeys, layout chosen by
         the PTOMB.CFG byte), or joystick; levels with [7971]/[7972] push the player +-2 (wind)
   if ticks[7f6e] > 0: animate x4
@@ -265,6 +275,8 @@ GameTick (1000:4f69), once per frame
 | 75EC      | "T" collectibles (5 -> 50,000 points)   |
 | 7961/7962 | holding cyan / magenta key              |
 | 7968      | enemies frozen (F pickup)               |
+| 795D      | cheat mode (invincible, unlimited spears)|
+| 795E      | player invisible (300 ticks, [75F2])    |
 | 7982      | score (6-byte TP Real, 7982-7987)       |
 | 7977-797B | Ctrl, Alt, LShift, RShift, ScrollLock   |
 | 7963      | quit-to-menu flag                       |
