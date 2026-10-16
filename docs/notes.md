@@ -33,10 +33,37 @@ length-prefixed. Segment map:
 ## Graphics
 
 - **CGA 320x200, 4 colors**, palette 1 (cyan/magenta/white), drawn through Graph3.
-- Sprites: Graph3 `GetPic` format, header `word mode=2, word w, word h`, then 2 bpp rows.
-  16x16 sprites, 4 animation frames each, stored in 0x9C-byte slots. 40 sprite sets live in
-  DS:0000-6180 and are copied into BSS at startup by `InitSprites_A/B`.
-- Full-screen images (`PTOMBn.MNU`) are **PCX** files (v5, 320x200, 2 bpp), loaded with the Genus toolkit.
+- Sprites: Graph3 `GetPic` format, header `word mode=2, word w, word h`, then 2 bpp rows
+  (MSB = leftmost pixel, 4 bytes per 16-px row). **All 160 frames are 16x16.** Each frame sits
+  in a 0x9C-byte slot (room for 24x24) padded with spaces.
+- 40 sets x 4 slots live in DS:0000-6180 and are copied into BSS at startup by
+  `InitSprites_A/B`. For enemies and effects the 4 slots are animation frames; tile sets
+  (bricks, slopes, items) hold 4 unrelated tiles, and some slots are empty.
+- Code refers to sprites by their BSS copy address. For example GameTick draws the player from
+  8D3A (set 3) or 8FAA (set 2). See the table below.
+- All four volumes have identical sprites; only the data segment base differs
+  (vol1 1825, vol2 182B, vol3/4 1820, in unpacked-file segments).
+- Full-screen images (`PTOMBn.MNU`) are **PCX** files (v5, 320x200, 2 bpp, 80 bytes/line,
+  palette byte 0x40 = palette 1, low intensity). They decode with no trailing bytes.
+- Extract everything with `tools/extract_gfx.py` (output goes to `gfx/`, not committed).
+
+### Sprite set -> BSS address
+
+| Set | DS src | BSS  | | Set | DS src | BSS  | | Set | DS src | BSS  | | Set | DS src | BSS  |
+|-----|--------|------|-|-----|--------|------|-|-----|--------|------|-|-----|--------|------|
+| 0   | 0000   | 8ACA | | 10  | 1860   | 9BDA | | 20  | 30C0   | AF5A | | 30  | 4920   | CB62 |
+| 1   | 0270   | 885A | | 11  | 1AD0   | 9E4A | | 21  | 3330   | B43A | | 31  | 4B90   | CDD2 |
+| 2   | 04E0   | 8FAA | | 12  | 1D40   | A0BA | | 22  | 35A0   | B7E2 | | 32  | 4E00   | D042 |
+| 3   | 0750   | 8D3A | | 13  | 1FB0   | A32A | | 23  | 3810   | BA52 | | 33  | 5070   | D2B2 |
+| 4   | 09C0   | 810A | | 14  | 2220   | A59A | | 24  | 3A80   | BCC2 | | 34  | 52E0   | D522 |
+| 5   | 0C30   | 837A | | 15  | 2490   | A80A | | 25  | 3CF0   | BF32 | | 35  | 5550   | D792 |
+| 6   | 0EA0   | 85EA | | 16  | 2700   | AA7A | | 26  | 3F60   | C1A2 | | 36  | 57C0   | DA02 |
+| 7   | 1110   | 948A | | 17  | 2970   | 921A | | 27  | 41D0   | C412 | | 37  | 5A30   | DC72 |
+| 8   | 1380   | 96FA | | 18  | 2BE0   | ACEA | | 28  | 4440   | C682 | | 38  | 5CA0   | DEE2 |
+| 9   | 15F0   | 996A | | 19  | 2E50   | B1CA | | 29  | 46B0   | C8F2 | | 39  | 5F10   | E152 |
+
+Frame n of a set is at BSS + n*0x9C. Sets 0-3 are the player; 4-19 are mostly tiles, items
+and score pop-ups (10K/12K/50K); 20-39 are enemies and effects.
 - **Collision reads the screen.** `GameTick` calls `Graph3_GetDotColor(x, y+2)` to decide whether the player
   falls. The port must keep a real 320x200 2 bpp framebuffer that game logic can read back.
 
