@@ -130,16 +130,47 @@ Port keys:
 | F3 | 4:3 aspect correction on/off |
 | F12 | save a screenshot PNG in the current directory |
 
-Command line: `--level N` (skip the title and menu and play that level, then exit),
-`--palette 0|1`, `--bright`, `--keys 1|2|3` (override PTOMB.CFG), `--cheat` (the menu cheat:
-invincible, unlimited spears), `--screenshot out.png` (render one level to a file and exit),
-`--sound-test` (play every sound effect once, named in the title bar), `--ending` (show this
-volume's ending pages), `--debug-exe` (print
-what the port found in the EXE), and two testing aids: `--script "..."` (scripted input, e.g.
-`--script "wait 70; down right; wait 18; up right; shot a.png; quit"`, times in 18.2 Hz ticks;
-`pad_a`, `pad_b`, `pad_x`, `pad_start`, `pad_back` and `pad_left` / `right` / `up` / `down`
-drive a virtual controller)
-and `--record-audio out.wav` (capture everything the speaker plays).
+### Command line
+
+```
+ptomb [PTOMBn.EXE] [options]
+```
+
+The EXE defaults to `PTOMB1.EXE` in the current folder.
+
+| Option | What it does |
+|--------|--------------|
+| `--palette 0\|1` | start in palette 0 (green/red/brown, the default) or 1 (cyan/magenta/white, the original) |
+| `--bright` | start in high intensity |
+| `--keys 1\|2\|3` | the walking keys: Shift, Alt / Ctrl or Ctrl / Alt (overrides `PTOMB.CFG`) |
+| `--cheat` | the menu cheat: invincible, with unlimited spears |
+| `--level N` | skip the title and menu, play level N, and exit when you quit |
+
+For testing and development:
+
+| Option | What it does |
+|--------|--------------|
+| `--screenshot out.png` | render a level (1, or the one given with `--level`) to a PNG and exit, without a window |
+| `--ending` | show this volume's ending pages |
+| `--sound-test` | play every sound effect once, named in the title bar |
+| `--record-audio out.wav` | record everything the PC speaker plays |
+| `--debug-exe` | print what the port found in the EXE |
+| `--script "..."` | play scripted input (below) |
+
+A script is a list of commands separated by `;`, timed in ticks of the 18.2 Hz timer. For
+example, `--script "wait 70; down right; wait 18; up right; shot a.png; quit"`.
+
+| Command | What it does |
+|---------|--------------|
+| `wait N` | wait N ticks |
+| `down KEY` / `up KEY` | press / release a key |
+| `tap KEY` | press a key for one tick |
+| `shot FILE.png` | save a screenshot |
+| `quit` | close the port |
+
+`KEY` is `left`, `right`, `up`, `down`, `space`, `esc`, `enter`, `pgup`, `pgdn` or a single
+character, or a control on a virtual game controller: `pad_a`, `pad_b`, `pad_x`, `pad_start`,
+`pad_back`, `pad_left`, `pad_right`, `pad_up` or `pad_down`.
 
 ## Reverse engineering workflow
 
