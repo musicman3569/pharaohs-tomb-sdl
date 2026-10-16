@@ -89,6 +89,11 @@ static const signed char level_monster_set[MAX_LEVELS + 1] = {
 /* GetPic of a blank 16x16 area, taken by ResetGameState (buffer at B6AA). */
 static uint8_t blank_pic[6 + 16 * 4] = {2, 0, 16, 0, 16, 0};
 
+const uint8_t *level_blank_pic(void)
+{
+    return blank_pic;
+}
+
 static const tile_t *find_tile(char ch)
 {
     for (size_t i = 0; i < sizeof tiles / sizeof tiles[0]; i++)
@@ -152,6 +157,7 @@ static void draw_level_row(level_t *lv, const gamedata_t *g, int row, const char
         if (t->flags & T_PLAYER) {
             lv->player_x = x;
             lv->player_y = y;
+            lv->player_found = true;
         }
         if (t->type)
             spawn_enemy(lv, t->type, x, y + t->y_off, t->speed, t->dx, t->dy);
@@ -166,8 +172,6 @@ void level_start(level_t *lv, const gamedata_t *g, int level)
         lv->enemy[i].free = true;
         lv->enemy[i].x = lv->enemy[i].y = -32;
     }
-    lv->wind = level == 10 ? 2 : level == 16 ? -2 : 0;
-    lv->invisible = level == 17;
 
     g3_graph_color_mode();
     if (level < 1 || level > g->num_levels)

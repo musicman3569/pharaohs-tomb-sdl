@@ -8,6 +8,8 @@ find_package(SDL2 REQUIRED CONFIG)
 
 add_executable(ptomb
     src/main.c
+    src/platform.c
+    src/game.c
     src/cga.c
     src/graph3.c
     src/lzexe.c

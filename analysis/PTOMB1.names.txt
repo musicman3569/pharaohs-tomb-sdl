@@ -83,7 +83,7 @@
 1854:64fb SpawnEnemy                # (type, x, y, speed, dx, dy, flag:byte) -> slot at 7EA4+i*12h
 1854:59be DrawLevelMonster          # (y, x, frame, level) per-level sprite for s/S tiles
 1000:1fa0 MoveEnemies               # per tick: one branch per enemy type 1..10
-1000:4dd4 PlayerJump_guess          # Space / joystick button 1
+1000:4dd4 PlayerJump                # Space / joystick button 1: start a jump
 1000:4df0 PlayerFire                # throw spear (a line); spears-1, refunded if cheat [795D]
 1000:3b2d TouchTile                 # (y, x) switch on tile map code; probed at 9 points around the player
 1000:5e20 SaveGame_guess            # 'S' in game
@@ -120,4 +120,15 @@
 # --- Cheat / player movement ---
 1000:3ad7 CheatSkipLevel            # in game: Scroll Lock + '+', next level (<= 20), +1000
 1000:3844 PlayerWalk                # (dx) pixel-checked step; picks walk/turn sprite
-1000:3612 PlayerJumpStep            # (dy) one jump/fall step with rising-pitch beep
+1000:3612 PlayerJumpStep            # (dy) one 1-px jump/fall step, pixel probes, rising-pitch beep
+
+# --- Player port (see src/game.c) ---
+1000:4ab0 JumpAnim                  # 4x per [7F6E] tick: JumpStep(-1) rising, (+1) falling
+1000:4b66 MoveIfPressed             # nested in PlayerMoveHorizontal: walk + wind push
+1000:380b Footstep                  # speaker click on frame 1
+1000:4cf5 MoveShot                  # spear line, 4 px per [7F6C] tick
+1000:3336 GameOver                  # game over screen, high score entry
+# 1854:0000 Delay(ticks), busy-wait on [7F74] (no Ghidra function there yet; create one to name it)
+1854:06a5 ShowLevelTitle            # (level) level name, wait 48-level ticks or a key
+1854:1017 FlushKeyboard
+1000:1c1f SnapshotForSave           # copies level/score/counters for the S key

@@ -26,13 +26,15 @@ typedef struct {
     int spawn_count;                                /* [7F76], counts every spawn attempt */
     int glint_x[MAX_GLINTS + 1], glint_y[MAX_GLINTS + 1]; /* 'c' gems, DS:7606 + n*6 */
     int glint_count;                                /* [7868] */
-    int player_x, player_y;                         /* [74DC] / [74DE] */
-    int wind;                                       /* +2 level 10 ([7971]), -2 level 16 ([7972]) */
-    bool invisible;                                 /* [795E], set at the start of level 17 */
+    int player_x, player_y;                         /* from the 'Y' tile -> [74DC] / [74DE] */
+    bool player_found;
 } level_t;
 
-/* StartLevel: clear the screen, draw all 12 rows, fill the tile map, spawn enemies, and draw
- * the line above the status bar. The status bar text itself isn't drawn yet. */
+/* The drawing half of StartLevel: clear the screen, draw all 12 rows, fill the tile map, spawn
+ * enemies, and draw the line above the status bar (whose text isn't drawn yet). */
 void level_start(level_t *lv, const gamedata_t *g, int level);
+
+/* GetPic of a blank 16x16 area (the game's buffer at B6AA), used to erase tiles. */
+const uint8_t *level_blank_pic(void);
 
 #endif

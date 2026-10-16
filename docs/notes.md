@@ -127,7 +127,7 @@ flag `[7964]` is set. "Erase" means the cell is cleared to 0 and overwritten wit
 |------|-------|------------|--------|--------|
 | 00 | (empty) | nothing | | |
 | 01 | `k` | **cyan key** | `[7961]` = 1, erase | 100 |
-| 02 | `d` | **cyan keyhole** | needs `[7961]`; uses the key, erases itself, then **opens the exit door**: every code-04 cell slides down 16 px and every code-05 cell slides up, with a rumble, and both become code FF (exit) | 500 |
+| 02 | `d` | **cyan keyhole** | needs `[7961]`; uses the key, erases itself, then **opens the exit door**: every code-04 cell slides 16 px right (a black column drawn at its left edge, then the brick 1 px further, 17 steps of Delay(1)) and every code-05 cell slides left (GetPic of the 17x17 area k px to the right, PutPic back at the cell, k = 1..6, Delay(2)), with random-pitch speaker noise, and both become code FF (exit) | 500 |
 | 03 | `p` | **spear** | spears `[75E2]` +1 (max 5), erase | 100, or 10,000 if already at 5 |
 | 04 | `}` | **exit door (slides down)** | looks like brick; inert until the keyhole is used | |
 | 05 | `{` | **exit door (slides up)** | same, slides up | |
@@ -307,11 +307,46 @@ GameTick (1000:4f69), once per frame
 | `tp.c` | TP `Random` (LCG 134775813; sequence not yet checked against 2714:08D5) |
 | `lzexe.c` / `gamedata.c` | reads the user's EXE (packed or not), finds DS and the level rows by pattern |
 | `level.c` | StartLevel / DrawLevelRow / SpawnEnemy / DrawLevelMonster, with the tile table as C data |
-| `main.c` | SDL2 window, input, level viewer |
+| `game.c` | GameTick, PlayerWalk, PlayerMoveHorizontal, PlayerJumpStep, PlayerFire, MoveShot, TouchTile, KillPlayer, AddTreasure, status-bar bonuses, ShowLevelTitle |
+| `platform.c` | keyboard ISR flags, BIOS key buffer (ReadKey / KeyPressed), shift flags, Delay, PC speaker, SDL window, `--script` test input |
+| `main.c` | options and the game loop (GameTick at a fixed 70 Hz) |
 
 Verified: `--screenshot` renders from the packed originals match `tools/render_levels.py`
 pixel for pixel, except the random `X` frames and the `q` tiles (the Python tool doesn't do the
-second, 2 px higher draw).
+second, 2 px higher draw). Scripted runs on volume 1 show falling, walking, jumping, picking up
+a gem (+100, treasure 1), being blocked by solid pixels, dying on spikes (lives 4 -> 3, treasure
+restored to its level-start value) and changing level.
 
-Not done yet: the status bar (it's printed in the BIOS 8x8 font, which the port can't ship),
-StartLevel's calls 1854:114F / 10A3 before the rows, and all gameplay.
+### Player mechanics (from the disassembly)
+
+- **Collision is all screen pixels.** PlayerWalk(dx) probes `(x+dx, y)`, `(x+15+dx, y)`,
+  `(x+dx, y-15)`, `(x+15+dx, y-15)`, `(x+dx, y-8)`, `(x+15+dx, y-8)`. Those columns include the
+  player's own sprite, so it only works because the player art is black there. Enemies'
+  pixels block too.
+- Walking is 2 px per tick of `[7F6A]` (36 px/s). A press against your facing only turns you.
+  The turn frame (set 3 frame 1) is gated on `[75E0]`, which only ResetGameState resets, so it
+  shows only on the first turns of a game. `PlayerWalk(0)`, used after picking up keys, turns
+  you to face left.
+- Gravity (GameTick): if not on a platform and `(x, y+2)` and `(x+14, y+2)` are black, fall
+  1 px and enter the jump state already falling (`[75D6]` = 22h).
+- Jump: `[75D6]` counts steps; below 22h each JumpStep goes up 1 px, from 22h down 1 px. There
+  are 4 steps per tick of `[7F6E]` (72 px/s), and a rising-pitch beep for the first 10 steps.
+  The first hit (ceiling or floor) pauses 10 steps and switches to falling; the second ends the
+  jump.
+- Keyboard ISR (1000:0000): only Left (4Bh) and Right (4Dh) make/break codes, into `[7975]` /
+  `[7976]`, then chains to the BIOS so ReadKey still works. Space, fire and the command keys
+  come through ReadKey; any extended key becomes `|`.
+- Wind (levels 10 and 16): PushPlayer(+-2) every move tick; a held direction key is also pushed
+  once more in its own direction.
+- Spear: an 8-px line at `y-8`, moving 4 px per tick of `[7F6C]`, stopped by any non-black pixel
+  or the screen edge.
+- Losing a life restarts the level, and StartLevel restores spears, T count and treasure to
+  their values when the level began (score and lives stay).
+- `ShowLevelTitle` (1854:06A5) prints the level's name and waits `48 - level` ticks or a key.
+
+Not done yet: MoveEnemies (enemies are drawn but static; only its "clear the on-platform flag"
+step runs), sound effects (1854:58D2 / 592F / 595F / 598F / 15F0 are silent; direct
+Sound/NoSound calls are real), the status bar text (BIOS font; shown in the window title),
+level names, the menus, save/restore, high scores, the joystick, the volume ending, and
+StartLevel's calls 1854:114F / 10A3. The glint off-by-one (entry 0 at (0, 0)) is kept on
+purpose.
