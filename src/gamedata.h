@@ -31,7 +31,40 @@ typedef struct {
     /* The game's own fonts for characters 80h-FFh (what it points INT 1Fh at): 128 glyphs x
      * 8 bytes, rows top first. Index by font_id_t. */
     uint8_t fonts[5][128 * 8];
+
+    /* Where things are. All units after the main program are identical in the four volumes and
+     * only move by a few paragraphs, so a routine's address is its PTOMB1 address + seg_delta. */
+    int seg_delta;            /* this EXE's unit segments minus PTOMB1's, in paragraphs */
+    char base_name[16];       /* 'ptombN', the game's name for its .MNU / .HS files */
+    char dir[512];            /* folder the EXE is in, with trailing separator (or "") */
+    /* Main-program routines (image offsets, 0 if not found): they move between volumes. */
+    size_t fn_title_screen, fn_main_menu, fn_high_scores, fn_joystick_menu, fn_game_over;
 } gamedata_t;
+
+/* Units as they sit in PTOMB1 (image-relative paragraphs); add g->seg_delta for other volumes. */
+enum {
+    SEG_GAME = 0x0854,   /* game unit, shown in Ghidra as 1854 */
+    SEG_GRAPH3 = 0x0F47,
+    SEG_CRT = 0x1081,
+    SEG_JOY = 0x10E3,
+    SEG_SYSTEM = 0x1714,
+};
+
+/* Linear image offset of SEG:OFF in this EXE. */
+size_t gamedata_addr(const gamedata_t *g, unsigned seg_ptomb1, unsigned off);
+
+/* Text-drawing calls found in a routine, in code order (see gamedata_text_ops). */
+typedef enum { OP_FONT, OP_COLOR, OP_CENTER, OP_AT, OP_STRLOAD } text_op_kind_t;
+typedef struct {
+    text_op_kind_t kind;
+    int a, b;          /* FONT: font_id; COLOR: colour; CENTER: colour, row; AT: col, row */
+    char text[81];     /* CENTER / AT / STRLOAD */
+} text_op_t;
+
+/* Scan len bytes of code at image offset `start` (in segment `cs`) for the game's text calls
+ * with constant arguments: DrawTextCentered, DrawTextAt, TextColor, the font selectors and
+ * StrLoad of a constant. Returns how many were stored in ops. */
+int gamedata_text_ops(const gamedata_t *g, size_t start, size_t len, unsigned cs, text_op_t *ops, int max);
 
 /* Which font-select routine (1854:1078..1124) picks each table. */
 typedef enum {

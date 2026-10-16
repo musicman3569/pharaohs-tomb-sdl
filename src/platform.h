@@ -38,6 +38,15 @@ shift_keys_t plat_shift_keys(void);
 /* 1854:0000 Delay(n): zero timer counter [7F74], then wait until it reaches n. */
 void plat_delay(int ticks);
 
+/* Crt Delay(ms): wait about that many milliseconds (keeping the window alive). */
+void plat_crt_delay(int ms);
+
+/* Keep a loop running at `hz` passes per second: call once per pass. */
+void plat_pace(int hz);
+
+/* Port extra: PgUp / PgDn pressed since the last call (-1, 0 or +1). */
+int plat_take_level_step(void);
+
 /* Crt Sound / NoSound: PC speaker square wave. */
 void plat_sound(int hz);
 void plat_nosound(void);

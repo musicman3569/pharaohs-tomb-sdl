@@ -31,6 +31,11 @@ void text_color(int color)
 void text_putc(int ch)
 {
     ch &= 0xFF;
+    if (ch == 8) { /* backspace: cursor left, nothing drawn */
+        if (cur_col > 1)
+            cur_col--;
+        return;
+    }
     if (cur_col > 40) {
         cur_col = 1;
         cur_row++;

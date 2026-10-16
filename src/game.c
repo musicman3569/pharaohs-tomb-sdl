@@ -7,6 +7,7 @@
 #include "platform.h"
 #include "sound.h"
 #include "text.h"
+#include "menu.h"
 #include "timer.h"
 #include "tp.h"
 
@@ -398,6 +399,7 @@ static void kill_player(void)
     G.loop_r = 12; /* end any tile-map loop in progress */
     G.loop_c = 20;
     if (G.lives < 0) {
+        menu_game_over(G.score); /* GameOver (1000:3336): high score entry */
         game_over_screen("GAME OVER");
     } else {
         draw_status_bar();
@@ -655,9 +657,10 @@ static void touch_tile(int x, int y)
         break;
     case 0xFF: /* exit */
         next_level();
-        if (G.level > G.data->num_levels)
-            game_over_screen("VOLUME COMPLETE"); /* 1854:4E01 ending text not ported */
-        else
+        if (G.level > G.data->num_levels) {
+            game_over_screen("VOLUME COMPLETE"); /* stands in for the 1854:4E01 ending */
+            menu_game_over(G.score);
+        } else
             game_start_level(G.level);
         break;
     default:
@@ -1071,14 +1074,13 @@ void game_tick(void)
 /* ------------------------------------------------------------------------------------------ */
 /* New game / StartLevel                                                                      */
 
-void game_new(const gamedata_t *data, int level)
+void game_reset_state(const gamedata_t *data, int key_layout)
 {
-    const int layout = G.key_layout ? G.key_layout : '3';
+    /* ResetGameState (1000:08D7) */
     memset(&G, 0, sizeof G);
     G.data = data;
-    G.key_layout = layout;
-    /* ResetGameState (1000:08D7) */
-    G.level = level;
+    G.key_layout = key_layout ? key_layout : '3';
+    G.level = 1;
     G.levels_entered = 1;
     G.lives = 4;
     G.spears = 2;
@@ -1087,10 +1089,69 @@ void game_new(const gamedata_t *data, int level)
     G.saved_spears = G.spears;
     G.saved_treasure = G.treasure;
     G.frame = 1;
-    tp_randseed = (uint32_t)tick_total * 2654435761u + 1u;
+    if (tp_randseed == 0)
+        tp_randseed = (uint32_t)tick_total * 2654435761u + 1u;
+}
+
+void game_play(int level, bool cheat)
+{
+    /* PlayGame (1000:53B7) */
+    G.cheat = cheat;
+    G.quit = G.game_over = false;
     game_start_level(level);
     draw_status_bar();
     flush_keyboard();
+    while (!G.quit && !G.game_over && !plat_quitting()) {
+        const int step = plat_take_level_step(); /* port extra: PgUp / PgDn */
+        if (step) {
+            int l = G.level + step;
+            if (l < 1)
+                l = G.data->num_levels;
+            if (l > G.data->num_levels)
+                l = 1;
+            game_start_level(l);
+        }
+        game_tick();
+        plat_poll();
+        plat_pace(GAME_TICK_HZ);
+    }
+}
+
+void game_title_demo(const gamedata_t *data, int key_layout)
+{
+    /* 1000:5D18: the explorer walks and jumps about on the title picture (using the real
+     * PlayerWalk and PlayerJumpStep, so the picture's pixels are the floor and walls) until a
+     * key is pressed or about 300 steps have passed. */
+    game_reset_state(data, key_layout);
+    G.px = 160;
+    G.py = 98;
+    G.jumping = false;
+    G.pushed = false;
+    int steps = 0, dir = 1;
+    for (;;) {
+        const int pause = tp_random(30);
+        int t = 1;
+        do {
+            plat_delay(1);
+            t++;
+            if (43 < G.px + dir && G.px + dir < 268)
+                player_walk(dir == 1 ? 2 : -2);
+            steps++;
+            if (pause + 25 < t)
+                break;
+        } while (!plat_key_pressed() && !plat_quitting());
+        dir = -dir;
+        G.jumping = true;
+        G.jump_steps = 0;
+        G.jump_pitch = 1;
+        do {
+            plat_crt_delay(10);
+            player_jump_step(G.jump_steps < 16 ? -1 : 1);
+        } while (G.py != 98 && !plat_key_pressed() && !plat_quitting());
+        G.jumping = false;
+        if (plat_key_pressed() || plat_quitting() || steps > 300)
+            return;
+    }
 }
 
 /* ShowLevelTitle (1854:06A5): the level's name in the frame StartLevel drew, then a pause of

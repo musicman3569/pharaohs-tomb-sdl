@@ -148,3 +148,20 @@
 1854:10f9 SelectFontTitle           # INT 1Fh -> DS:6980
 1854:1124 SelectFontExtra           # INT 1Fh -> DS:6D80
 2081:0215 Crt_GotoXY
+
+# --- Title, menus, high scores ---
+1000:027e LoadPcxScreen             # (name) Genus PCX load into buffer [75A2]; error -> text mode, Halt
+1000:04d1 ShowTitleRandomEffect     # Random(18) -> ShowPcxEffect with one of 18 settings
+1000:048d ShowPcxEffect             # (variant, delay, type) via Genus PCX Effects 20FF:01FB
+1000:5d18 TitleDemo                 # explorer walks/jumps on the title picture
+1000:552e MenuBats                  # two bats at y=60 above the menu
+1854:1043 WaitKey                   # flush, then wait for KeyPressed
+1854:0fb7 SaveConfig                # PTOMB.cfg <- [8101]
+1854:6396 SortHighScores            # bubble sort, ascending
+1854:570d ReadLine                  # (echo, max, var s)
+1854:5835 UpCaseString
+1854:6794 SaveHighScores            # <base>.hs, 5 x 0x106
+1854:06a5 ShowLevelTitle            # (level) one of 4 x 20 names, by base name
+20ff:000f PcxFx_SetType             # 0..9, 9 = random (timer seed)
+20ff:00dd PcxFx_SetDelay
+20ff:01fb PcxFx_Show                # jump table of effect routines

@@ -186,12 +186,16 @@ static void find_level_names(gamedata_t *g)
             cs = (long)rd16(img + i + 3) * 16;
     if (cs < 0)
         return;
+    g->seg_delta = (int)(cs / 16) - SEG_GAME;
 
     /* which volume: main stores 'ptombN' as the base file name */
     g->volume = 1;
+    strcpy(g->base_name, "ptomb1");
     for (size_t i = g->entry > 0x200 ? g->entry - 0x200 : 0; i + 7 <= g->entry + 0x100 && i + 7 <= g->image_len; i++)
         if (img[i] == 6 && memcmp(img + i + 1, "ptomb", 5) == 0 && img[i + 6] >= '1' && img[i + 6] <= '4') {
             g->volume = img[i + 6] - '0';
+            memcpy(g->base_name, img + i + 1, 6);
+            g->base_name[6] = '\0';
             break;
         }
 
@@ -204,6 +208,138 @@ static void find_level_names(gamedata_t *g)
             g->level_names[l][c] = (char)img[p + 1 + c];
         g->level_names[l][len] = '\0';
     }
+}
+
+size_t gamedata_addr(const gamedata_t *g, unsigned seg_ptomb1, unsigned off)
+{
+    return (size_t)((long)seg_ptomb1 + g->seg_delta) * 16 + off;
+}
+
+/* Target of a call at image offset p in segment cs: "push cs / call near" (0E E8) or
+ * "callf seg:off" (9A). Returns 0 if there's no call there; *len gets its length. */
+static size_t call_target(const gamedata_t *g, size_t p, unsigned cs, size_t *len)
+{
+    const uint8_t *c = g->image + p;
+    if (p + 5 > g->image_len)
+        return 0;
+    if (c[0] == 0x0E && c[1] == 0xE8) {
+        *len = 4;
+        const unsigned ip = (unsigned)((p + 4) - cs * 16u);
+        return cs * 16u + ((ip + rd16(c + 2)) & 0xFFFF);
+    }
+    if (c[0] == 0xE8) {
+        *len = 3;
+        const unsigned ip = (unsigned)((p + 3) - cs * 16u);
+        return cs * 16u + ((ip + rd16(c + 1)) & 0xFFFF);
+    }
+    if (c[0] == 0x9A) {
+        *len = 5;
+        return rd16(c + 3) * 16u + rd16(c + 1);
+    }
+    return 0;
+}
+
+static void copy_pstring(const gamedata_t *g, size_t p, char *out, size_t outlen)
+{
+    size_t n = p < g->image_len ? g->image[p] : 0;
+    if (n > outlen - 1)
+        n = outlen - 1;
+    for (size_t i = 0; i < n && p + 1 + i < g->image_len; i++)
+        out[i] = (char)g->image[p + 1 + i];
+    out[n] = '\0';
+}
+
+int gamedata_text_ops(const gamedata_t *g, size_t start, size_t len, unsigned cs, text_op_t *ops, int max)
+{
+    const uint8_t *img = g->image;
+    const size_t centered = gamedata_addr(g, SEG_GAME, 0x1446), at = gamedata_addr(g, SEG_GAME, 0x1385);
+    const size_t textcolor = gamedata_addr(g, SEG_CRT, 0x0259), strload = gamedata_addr(g, SEG_SYSTEM, 0x0275);
+    static const unsigned font_off[5] = {0x1078, 0x10A3, 0x10CE, 0x10F9, 0x1124}; /* font_id_t order */
+    int n = 0;
+    size_t end = start + len < g->image_len ? start + len : g->image_len;
+    for (size_t p = start; p + 16 < end && n < max; p++) {
+        size_t clen, t;
+        text_op_t *op = &ops[n];
+        memset(op, 0, sizeof *op);
+        /* mov ax,A / push ax / mov ax,B / push ax / mov di,S / push cs / push di / call */
+        if (img[p] == 0xB8 && img[p + 3] == 0x50 && img[p + 4] == 0xB8 && img[p + 7] == 0x50 &&
+            img[p + 8] == 0xBF && img[p + 11] == 0x0E && img[p + 12] == 0x57 &&
+            (t = call_target(g, p + 13, cs, &clen)) != 0 && (t == centered || t == at)) {
+            op->kind = t == centered ? OP_CENTER : OP_AT;
+            op->a = rd16(img + p + 1);
+            op->b = rd16(img + p + 5);
+            copy_pstring(g, cs * 16u + rd16(img + p + 9), op->text, sizeof op->text);
+            n++;
+            p += 12 + clen;
+            continue;
+        }
+        /* mov al,C / push ax / callf TextColor   (or mov ax,C) */
+        if ((img[p] == 0xB0 && img[p + 2] == 0x50 && (t = call_target(g, p + 3, cs, &clen)) == textcolor) ||
+            (img[p] == 0xB8 && img[p + 3] == 0x50 && (t = call_target(g, p + 4, cs, &clen)) == textcolor)) {
+            op->kind = OP_COLOR;
+            op->a = img[p + 1];
+            n++;
+            continue;
+        }
+        /* mov di,S / push cs / push di / callf StrLoad */
+        if (img[p] == 0xBF && img[p + 3] == 0x0E && img[p + 4] == 0x57 &&
+            (t = call_target(g, p + 5, cs, &clen)) == strload) {
+            op->kind = OP_STRLOAD;
+            copy_pstring(g, cs * 16u + rd16(img + p + 1), op->text, sizeof op->text);
+            n++;
+            continue;
+        }
+        if ((img[p] == 0x0E || img[p] == 0x9A) && (t = call_target(g, p, cs, &clen)) != 0) {
+            for (int f = 0; f < 5; f++)
+                if (t == gamedata_addr(g, SEG_GAME, font_off[f])) {
+                    op->kind = OP_FONT;
+                    op->a = f;
+                    n++;
+                    p += clen - 1;
+                    break;
+                }
+        }
+    }
+    return n;
+}
+
+/* Main-program routines the menus need (their addresses differ between volumes). */
+static void find_main_routines(gamedata_t *g)
+{
+    const uint8_t *img = g->image;
+    /* The entry code's near calls are ResetGameState, InstallKeyboardISR, TitleScreen,
+     * MainMenu, RestoreKeyboardISR, in that order. */
+    int nth = 0;
+    for (size_t p = g->entry; p + 3 < g->image_len && p < g->entry + 0xC0 && nth < 4; p++) {
+        if (img[p] != 0xE8)
+            continue;
+        size_t clen;
+        const size_t t = call_target(g, p, 0, &clen);
+        if (t >= g->entry || t < 0x20)
+            continue; /* not a plausible near call into the main program */
+        nth++;
+        if (nth == 3)
+            g->fn_title_screen = t;
+        if (nth == 4)
+            g->fn_main_menu = t;
+        p += 2;
+    }
+    /* MainMenu: cmp al,'H' / jnz / mov al,1 / push ax / push cs / call ShowHighScores
+     *           cmp al,'J' / jnz / call JoystickMenu */
+    for (size_t p = g->fn_main_menu; g->fn_main_menu && p < g->fn_main_menu + 0x400 && p + 12 < g->image_len; p++) {
+        size_t clen;
+        if (img[p] == 0x3C && img[p + 1] == 'H' && img[p + 2] == 0x75 && img[p + 4] == 0xB0 && img[p + 6] == 0x50)
+            g->fn_high_scores = call_target(g, p + 7, 0, &clen);
+        if (img[p] == 0x3C && img[p + 1] == 'J' && img[p + 2] == 0x75 && img[p + 4] == 0xE8)
+            g->fn_joystick_menu = call_target(g, p + 4, 0, &clen);
+    }
+    /* GameOver: ... mov byte [7963],1 / mov byte [7964],1 / mov ax,[7982] (the score) */
+    static const uint8_t go[] = {0xC6, 0x06, 0x63, 0x79, 0x01, 0xC6, 0x06, 0x64, 0x79, 0x01, 0xA1, 0x82, 0x79};
+    for (size_t p = 12; p + sizeof go < g->entry; p++)
+        if (memcmp(img + p, go, sizeof go) == 0) {
+            g->fn_game_over = p - 12;
+            break;
+        }
 }
 
 int gamedata_load(gamedata_t *g, const char *path, char *err, size_t errlen)
@@ -267,6 +403,18 @@ int gamedata_load(gamedata_t *g, const char *path, char *err, size_t errlen)
         return -1;
     }
     find_level_names(g); /* optional: titles are just left blank if this fails */
+    find_main_routines(g);
+
+    /* the EXE's folder, where the game keeps its .MNU, .HS and .CFG files */
+    snprintf(g->dir, sizeof g->dir, "%s", path);
+    char *slash = NULL;
+    for (char *c = g->dir; *c; c++)
+        if (*c == '/' || *c == '\\')
+            slash = c;
+    if (slash)
+        slash[1] = '\0';
+    else
+        g->dir[0] = '\0';
     return 0;
 }
 

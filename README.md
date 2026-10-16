@@ -28,8 +28,16 @@ can spear, pushable blocks, vertical hazards, elevators, ceiling bats, dart trap
 freeze pickup. **All the original PC-speaker sound effects** play (E toggles them, as in the
 game). The **status bar, prompts, level titles and game-over screen** are drawn on screen as
 in the original, using the game's own fonts from the EXE plus the port's own 8x8 font for
-plain ASCII (standing in for the IBM BIOS font, which can't be shipped). Not yet: the title
-screen and menus, saving, high scores, and the joystick.
+plain ASCII (standing in for the IBM BIOS font, which can't be shipped). It **starts like the
+original**: the title picture and walking demo, then the main menu with instructions, story,
+ordering info, keyboard setup, joystick screen and high scores (read from and saved to the
+game's own `PTOMBn.HS`, so existing scores carry over). Not yet: saving games, the joystick
+itself, the end-of-volume sequence, and the exact Genus picture-transition effects
+(approximated as wipes).
+
+The port reads `PTOMBn.MNU`, `PTOMBn.HS` and `PTOMB.CFG` from the folder the EXE is in, and
+**writes** `PTOMBn.HS` (a new high score) and `PTOMB.CFG` (Config Keyboard) there, as the
+original does.
 
 ### Build (Windows, MSYS2 mingw64)
 
@@ -47,8 +55,11 @@ commands work with SDL2 installed through your package manager.
 ### Run
 
 ```
-build/ptomb.exe game/PTOMB1.EXE --level 1
+build/ptomb.exe game/PTOMB1.EXE
 ```
+
+Menu keys as in the original: E, Space or Enter to play, I instructions, S story, H high scores,
+O ordering info, C config keyboard, J joystick, Q quit.
 
 Game keys (the original's):
 
@@ -60,7 +71,7 @@ Game keys (the original's):
 | Z X C V B N M , . / F | throw a spear |
 | P | pause |
 | E | sound effects on/off |
-| Q or Esc, then Y | quit (starts a new game; there's no menu yet) |
+| Q or Esc, then Y | quit to the main menu |
 | Scroll Lock on + `+` | cheat: skip to the next level |
 
 Port keys:
@@ -73,10 +84,11 @@ Port keys:
 | F3 | 4:3 aspect correction on/off |
 | F12 | save a screenshot PNG in the current directory |
 
-Command line: `--level N`, `--palette 0|1`, `--bright`, `--keys 1|2|3`, `--cheat` (the
-menu cheat: invincible, unlimited spears), `--screenshot out.png` (render one level to a file and
-exit), `--sound-test` (play every sound effect once, named in the title bar), and two testing
-aids: `--script "..."` (scripted input, e.g.
+Command line: `--level N` (skip the title and menu and play that level, then exit),
+`--palette 0|1`, `--bright`, `--keys 1|2|3` (override PTOMB.CFG), `--cheat` (the menu cheat:
+invincible, unlimited spears), `--screenshot out.png` (render one level to a file and exit),
+`--sound-test` (play every sound effect once, named in the title bar), `--debug-exe` (print
+what the port found in the EXE), and two testing aids: `--script "..."` (scripted input, e.g.
 `--script "wait 70; down right; wait 18; up right; shot a.png; quit"`, times in 18.2 Hz ticks)
 and `--record-audio out.wav` (capture everything the speaker plays).
 

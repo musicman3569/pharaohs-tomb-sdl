@@ -443,6 +443,31 @@ void plat_delay(int ticks)
     }
 }
 
+void plat_crt_delay(int ms)
+{
+    const Uint64 end = SDL_GetPerformanceCounter() + (Uint64)ms * perf_freq / 1000;
+    while (SDL_GetPerformanceCounter() < end && !quitting) {
+        plat_poll();
+        SDL_Delay(1);
+    }
+}
+
+void plat_pace(int hz)
+{
+    static Uint64 next;
+    const Uint64 period = perf_freq / (Uint64)hz;
+    Uint64 now = SDL_GetPerformanceCounter();
+    if (next == 0 || now > next + perf_freq / 4)
+        next = now; /* first call, or far behind (a long animation): don't catch up */
+    next += period;
+    while (now < next && !quitting) {
+        const Uint64 left_ms = (next - now) * 1000 / perf_freq;
+        SDL_Delay(left_ms > 1 ? (Uint32)(left_ms - 1) : 0);
+        plat_poll();
+        now = SDL_GetPerformanceCounter();
+    }
+}
+
 /* --- set-up -------------------------------------------------------------------------------- */
 
 int plat_init(int pal, int bri, char *err, size_t errlen)

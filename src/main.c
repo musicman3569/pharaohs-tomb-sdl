@@ -3,10 +3,12 @@
  *   ptomb [PTOMBn.EXE] [--level N] [--palette 0|1] [--bright] [--keys 1|2|3] [--cheat]
  *         [--screenshot out.png] [--script "wait 40; down right; wait 10; up right; shot a.png; quit"]
  *
+ * Starts like the original: title screen, then the main menu. --level N goes straight into a
+ * level instead (for testing) and exits afterwards.
+ *
  * In game: Left/Right walk, Space jump, Z X C V B N M , . / F throw a spear, P pause,
  * E sound on/off, Q or Esc quit (then Y). Port extras: PgUp/PgDn change level, F1 palette,
- * F2 intensity, F3 aspect correction, F12 screenshot. There's no menu yet: quitting or
- * losing starts a new game. */
+ * F2 intensity, F3 aspect correction, F12 screenshot. */
 #include <SDL.h>
 
 #include <stdio.h>
@@ -17,18 +19,15 @@
 #include "game.h"
 #include "gamedata.h"
 #include "level.h"
+#include "menu.h"
 #include "platform.h"
 #include "platform_sdl.h"
 #include "sound.h"
 
-/* GameTick runs flat out on the original hardware; anything speed-sensitive is paced by the
- * 18.2 Hz timer counters instead. Running it at a fixed 70 Hz keeps those counters from being
- * missed while keeping per-call randomness (gem glints) independent of the monitor. */
-#define GAME_TICK_HZ 70
-
 typedef struct {
     const char *exe_path;
     int level;
+    int level_given;
     int palette; /* 0 by default: the project's preferred look; 1 is the game's own */
     int bright;
     int keys;    /* PTOMB.CFG layout for the alternate keys */
@@ -37,18 +36,43 @@ typedef struct {
     const char *script;
     const char *record_audio;
     int sound_test;
+    int debug_exe;
 } options_t;
+
+/* --debug-exe: print what was found in the EXE (for checking the pattern scanners). */
+static void debug_exe(const gamedata_t *g)
+{
+    printf("volume %d, base name '%s', dir '%s', unit shift %+d\n", g->volume, g->base_name, g->dir,
+           g->seg_delta);
+    const struct { const char *name; size_t at; size_t len; } fns[] = {
+        {"TitleScreen", g->fn_title_screen, 0x200}, {"MainMenu", g->fn_main_menu, 0x1A0},
+        {"ShowHighScores", g->fn_high_scores, 0x60}, {"JoystickMenu", g->fn_joystick_menu, 0x60},
+        {"GameOver", g->fn_game_over, 0x80},
+    };
+    static const char *const kinds[] = {"FONT", "COLOR", "CENTER", "AT", "STRLOAD"};
+    for (size_t i = 0; i < sizeof fns / sizeof fns[0]; i++) {
+        printf("%-15s at %05zX\n", fns[i].name, fns[i].at);
+        if (!fns[i].at)
+            continue;
+        text_op_t ops[40];
+        const int n = gamedata_text_ops(g, fns[i].at, fns[i].len, 0, ops, 40);
+        for (int k = 0; k < n; k++)
+            printf("    %-7s %3d %3d  %s\n", kinds[ops[k].kind], ops[k].a, ops[k].b, ops[k].text);
+    }
+}
 
 static int parse_args(int argc, char **argv, options_t *o)
 {
     memset(o, 0, sizeof *o);
     o->exe_path = "PTOMB1.EXE";
     o->level = 1;
-    o->keys = '3';
+    o->keys = 0; /* 0 = use PTOMB.CFG */
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
-        if (!strcmp(a, "--level") && i + 1 < argc)
+        if (!strcmp(a, "--level") && i + 1 < argc) {
             o->level = atoi(argv[++i]);
+            o->level_given = 1;
+        }
         else if (!strcmp(a, "--palette") && i + 1 < argc)
             o->palette = atoi(argv[++i]) ? 1 : 0;
         else if (!strcmp(a, "--bright"))
@@ -65,6 +89,8 @@ static int parse_args(int argc, char **argv, options_t *o)
             o->record_audio = argv[++i];
         else if (!strcmp(a, "--sound-test"))
             o->sound_test = 1;
+        else if (!strcmp(a, "--debug-exe"))
+            o->debug_exe = 1;
         else if (a[0] == '-') {
             fprintf(stderr, "usage: ptomb [PTOMBn.EXE] [--level N] [--palette 0|1] [--bright] "
                             "[--keys 1|2|3] [--cheat] [--screenshot out.png]\n");
@@ -106,12 +132,6 @@ static void sound_test(void)
     plat_message("");
 }
 
-static void new_game(const gamedata_t *data, const options_t *opt, int level)
-{
-    G.key_layout = opt->keys;
-    game_new(data, level);
-    G.cheat = opt->cheat != 0; /* the menu's Scroll Lock + '+' cheat */
-}
 
 int main(int argc, char **argv)
 {
@@ -124,6 +144,11 @@ int main(int argc, char **argv)
     if (gamedata_load(&data, opt.exe_path, err, sizeof err) != 0) {
         fail(err);
         return 1;
+    }
+    if (opt.debug_exe) {
+        debug_exe(&data);
+        gamedata_free(&data);
+        return 0;
     }
     if (opt.level < 1 || opt.level > data.num_levels)
         opt.level = 1;
@@ -153,41 +178,24 @@ int main(int argc, char **argv)
         gamedata_free(&data);
         return 0;
     }
+    if (menu_init(&data, err, sizeof err) != 0) {
+        fail(err);
+        plat_shutdown();
+        gamedata_free(&data);
+        return 1;
+    }
+    const int layout = opt.keys ? opt.keys : menu_key_layout();
     if (opt.script)
         plat_set_script(opt.script);
-    new_game(&data, &opt, opt.level);
 
-    const Uint64 freq = SDL_GetPerformanceFrequency();
-    const Uint64 period = freq / GAME_TICK_HZ;
-    Uint64 next = SDL_GetPerformanceCounter();
-
-    while (!plat_quitting()) {
-        if (G.quit)
-            new_game(&data, &opt, opt.level);
-
-        const int step = plat_take_level_step();
-        if (step) {
-            int l = G.level + step;
-            if (l < 1)
-                l = data.num_levels;
-            if (l > data.num_levels)
-                l = 1;
-            game_start_level(l);
-        }
-
-        game_tick();
-        plat_poll();
-
-        next += period;
-        Uint64 now = SDL_GetPerformanceCounter();
-        if (now > next + freq / 4)
-            next = now; /* fell far behind (a long animation): don't try to catch up */
-        while (now < next && !plat_quitting()) {
-            const Uint64 left_ms = (next - now) * 1000 / freq;
-            SDL_Delay(left_ms > 1 ? (Uint32)(left_ms - 1) : 0);
-            plat_poll();
-            now = SDL_GetPerformanceCounter();
-        }
+    if (opt.level_given) {
+        /* straight into a level (testing): play once, then exit */
+        game_reset_state(&data, layout);
+        game_play(opt.level, opt.cheat != 0);
+    } else {
+        /* as the original: title screen, then the main menu until Quit */
+        menu_title_screen();
+        menu_main(opt.cheat != 0);
     }
 
     plat_shutdown();

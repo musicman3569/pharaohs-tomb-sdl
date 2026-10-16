@@ -80,8 +80,19 @@ typedef struct {
 
 extern game_t G;
 
-/* ResetGameState (1000:08D7) for a new game, then StartLevel(level). */
-void game_new(const gamedata_t *data, int level);
+/* How often GameTick runs. On the original it runs flat out; anything speed-sensitive is paced
+ * by the 18.2 Hz timer counters instead. A fixed 70 Hz keeps those counters from being missed
+ * while keeping per-call randomness (gem glints) independent of the monitor. */
+#define GAME_TICK_HZ 70
+
+/* ResetGameState (1000:08D7). */
+void game_reset_state(const gamedata_t *data, int key_layout);
+
+/* PlayGame (1000:53B7): StartLevel(level), then GameTick until quit or game over. */
+void game_play(int level, bool cheat);
+
+/* The title-screen walking demo (1000:5D18). */
+void game_title_demo(const gamedata_t *data, int key_layout);
 
 /* StartLevel (1000:7638), including the level title wait (1854:06A5). */
 void game_start_level(int level);

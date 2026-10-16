@@ -485,5 +485,75 @@ vertical hazards, elevators and bats moving (levels 2, 3, 5, 9). On level 16, a 
 right-hand walker (+250) and the left one kills the player. Freeze and the dart traps are ported
 but haven't been exercised in a scripted run yet.
 
-Not done yet: the title screen and menus, save/restore, high scores, the joystick and the
-volume ending (1854:4E01). The glint off-by-one (entry 0 at (0, 0)) is kept on purpose.
+Not done yet: save/restore (S/R in game, 1000:5E20 / 5F3B), the joystick, the volume ending
+(1854:4E01), the text-mode exit screen (1854:60C8), and the Genus transition effects (approximated).
+The glint off-by-one (entry 0 at (0, 0)) is kept on purpose.
+
+## Title screen, menus and high scores
+
+**Startup** (main, 1000:8473): ... LoadHighScores, LoadConfig, then the entry code's near calls
+are ResetGameState, InstallKeyboardISR, **TitleScreen (1000:6227)**, `[75FE]` = 1 (start
+level), **MainMenu (1000:5A9F)**, RestoreKeyboardISR, then ExitTextScreen and Halt.
+
+**The title picture**: LoadPcxScreen (1000:027E) loads `<base>.mnu` (a 320x200 2 bpp PCX)
+into an off-screen buffer with the Genus PCX Toolkit, dropping to a text-mode error and Halt
+if that fails. 1000:04D1 shows it with one of 18 transitions picked by `Random(18)`, through
+1000:048D -> Genus PCX Effects (`20FF:000F` type 0-9, 9 = random; `20FF:00DD` delay;
+`20FF:01FB` run, a jump table of effect routines). The 18 settings are (variant, delay, type)
+= (4,0,3) (8,0,3) (2,0,3) (1,0,3) (1,4,0) (2,4,0) (4,4,0) (8,4,0) (2,0,8) (1,0,8) (2,4,6)
+(1,4,6) (1,4,1) (2,4,1) (6,0,7) (5,0,7) (10,0,7) (9,0,7). The variants look like a direction mask
+(1/2/4/8, pairs = diagonals). The effect routines themselves aren't decoded; the port
+approximates them as wipes (`pcx.c`).
+
+**TitleScreen**: picture + effect; menu font; one of four volume headers
+(DrawTextCentered(1, 16, ...), chosen by `[75CE]`); title font; credits on rows 18 / 20 / 21 / 22
+("BY GEORGE BROUSSAD", sic); "THIS GAME IS NOT SHAREWARE OR PD!" on row 23 unless the base
+name is 'ptomb1'; an anti-piracy message that only prints if the base name is 'impossible'
+(never); then the **walking demo** (1000:5D18): ResetGameState, player at (160, 98), walking
+2 px per tick for `Random(30) + 25` ticks then jumping (JumpStep -1 for 16 steps, then +1 until
+back at y = 98, 10 ms Crt Delay per step), turning round each time, within x 44..267. It uses the
+real PlayerWalk / PlayerJumpStep, so the picture's pixels are its floor. It stops on a key or
+after 300 steps.
+
+**MainMenu**: each pass: GraphColorMode, ResetGameState, picture + random effect, title font,
+"VER: 3.0   MAIN MENU     VOL: " + Str(volume) centred on row 11 in colour 3, menu font, four
+label lines on rows 16-22 in colour 2 with their hot-key letters redrawn by DrawTextAt in
+colour 1, two bats (1000:552E: set 18 at y = 60, x 30..80 and 220..270, one step per Delay(1)).
+It then loops `Random(32767)` and the bats until a key in the set at CS:5A7F
+(Enter Space + C E H I J O Q S) is pressed:
+
+| Key | Action |
+|-----|--------|
+| E / Space / Enter | PlayGame (1000:53B7): StartLevel(`[75FE]`), DrawStatusBar, FlushKeyboard, GameTick until quit or game over |
+| + | ReadShiftKeys; with Scroll Lock on, cheat mode and PlayGame |
+| Q | ShowOrderingInfo(volume, 0), then leave the menu (exit) |
+| O | ShowOrderingInfo(volume, 1) |
+| I | ShowInstructions (1854:2A20): four pages |
+| S | ShowStory(volume) (1854:3A03) |
+| H | ShowHighScores(1); the key that dismisses it is left in the buffer for the menu |
+| C | ConfigKeyboard (1854:69D3): keys in the set at 1854:69B3; not Esc -> `[8101]`, SaveConfig (1854:0FB7) rewrites PTOMB.cfg |
+| J | JoystickMenu (1000:57C4) |
+
+The text screens (instructions, story, ordering info, config keyboard, joystick) are run by the
+port's **screen interpreter** (`screenvm.c`) directly from the EXE: they only use ~30
+instruction forms (immediate pushes, near/far calls, CMP + JZ/JNZ on the volume, a key or a
+flag), and every call is routed to the port's text, font, key and frame routines. Their text
+therefore never has to be copied into the port. The other screens are ported by hand, with their
+strings found by `gamedata_text_ops` (the routine's DrawTextCentered / DrawTextAt / TextColor /
+font-select / StrLoad calls with constant arguments).
+
+**High scores**: 5 records at DS:7892 + i*0x106 (6-byte Real score, string[255] name), ascending
+so record 5 is the best; exactly the `.HS` file. Defaults (no file): scores 10000*i + 35000 and
+names that read down the table as "CAN YOU SURVIVE THE / PERILS OF THE GREAT / PYRAMID?  LEAD ON
+/ ADVENTURER AND SEE!". ShowHighScores (1000:5403): picture + effect, title font, "H I G H   S C O
+R E S" (3, 11), game font, then for i = 5..1 on rows 15, 17, ..., 23: rank (colour 2, col 5), "."
+(col 6), score (colour 1, col 8), name (colour 3, col 18). A name equal to the marker `~|!+` is
+blanked and its row remembered (`[75CC]`).
+
+**GameOver** (1000:3336, called by KillPlayer when lives < 0, and after the volume ending):
+GraphColorMode, set quit and game-over flags; if score > record 1 (`JA`, strictly greater): menu
+font, "NEW HIGH SCORE !" (1, 11), "ENTER YOUR NAME ON THE" (3, 13), "NEXT SCREEN" (3, 14),
+DrawFrame(2, 2, 38, 24, colour 1), Delay(60); record 1 = (score, `~|!+`); bubble sort (1854:6396);
+ShowHighScores(0); GotoXY(18, 15 + `[75CC]`); ReadLine(max 20) (1854:570D: characters 20h-7Fh are
+appended and echoed raw, so they show in the ROM font; backspace writes 8, space, 8; Enter ends;
+an extended key's scancode byte gets appended too); UpCase (1854:5835); save (1854:6794).

@@ -13,6 +13,10 @@ add_executable(ptomb
     src/sound.c
     src/text.c
     src/font8x8.c
+    src/screenvm.c
+    src/pcx.c
+    src/hiscore.c
+    src/menu.c
     src/cga.c
     src/graph3.c
     src/lzexe.c
