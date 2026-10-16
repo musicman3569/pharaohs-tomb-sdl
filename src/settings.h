@@ -29,9 +29,14 @@ typedef struct {
     int palette;    /* display.palette: 0 green/red/brown, 1 cyan/magenta/white (the original) */
     int bright;     /* display.bright: high intensity */
     int aspect_43;  /* display.aspect: stretch to 4:3 as on a CRT */
+    int fullscreen; /* display.fullscreen: start in fullscreen (F11 / Alt+Enter switch) */
 
     /* input */
     int joystick;   /* input.joystick: start with the joystick (controller) switched on */
+
+    /* menus (enhancement) */
+    int navigation; /* menu.navigation: a cursor on the main menu (arrows, d-pad, mouse),
+                       and clicks counting as a key on "press any key" screens */
 } settings_t;
 
 extern settings_t settings;

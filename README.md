@@ -115,6 +115,7 @@ off or recalibrates it, as in the game.
 | A | jump | Enter | Y |
 | B or X | throw a spear | B: Esc | B: N |
 | Start | pause | Enter | Y |
+| D-pad | | moves the menu cursor (enhanced) | |
 | Back / View | quit prompt | | N |
 
 The original's joystick fire button didn't check your spear count, so it kept throwing at
@@ -128,14 +129,21 @@ Port keys:
 | F1 | CGA palette 0 (green/red/brown, default) or 1 (cyan/magenta/white, the original) |
 | F2 | low / high intensity |
 | F3 | 4:3 aspect correction on/off |
+| F11 or Alt+Enter | fullscreen on/off |
 | F12 | save a screenshot PNG in the current directory |
 
 ### Settings
 
 The port has two presets: **classic**, the original game exactly as released in v1.0.0 (the
-default), and **enhanced**, which will switch on every enhancement as they're added (none yet,
-so for now the two play the same). Choose one with `--classic` or `--enhanced`, or in a
-`ptomb.ini` file next to `ptomb.exe`, which can also change single settings:
+default), and **enhanced**, which switches on every enhancement. So far that is:
+
+- **Main menu cursor** (`menu.navigation`): a highlight you move with the arrow keys, the
+  d-pad or the mouse, and choose with Enter, Space, A or a click. The letter keys still work.
+  Clicks also count as a key on "press any key" screens. (In classic, as in the original,
+  the arrow keys type letters: Up opens the high scores.)
+
+Choose a preset with `--classic` or `--enhanced`, or in a `ptomb.ini` file next to
+`ptomb.exe`, which can also change single settings:
 
 ```ini
 [game]
@@ -145,14 +153,18 @@ preset = classic      ; or enhanced
 palette = 0           ; 0 = green/red/brown, 1 = cyan/magenta/white (the original's)
 bright = off
 aspect = on           ; stretch to 4:3, as a CRT showed it
+fullscreen = off      ; F11 or Alt+Enter switches
 
 [input]
 joystick = on         ; start with the controller on (the original started with it off)
+
+[menu]
+navigation = off      ; the main menu cursor (on in enhanced)
 ```
 
 `ptomb --print-settings > ptomb.ini` writes a complete file with every setting explained.
-The command line overrides the file: `--set display.palette=1`, for example. F1-F3 change
-the display settings for the current run only.
+The command line overrides the file: `--set display.palette=1`, for example. F1-F3 and F11
+change the display settings for the current run only.
 
 ### Command line
 
@@ -194,9 +206,10 @@ example, `--script "wait 70; down right; wait 18; up right; shot a.png; quit"`.
 | `down KEY` / `up KEY` | press / release a key |
 | `tap KEY` | press a key for one tick |
 | `shot FILE.png` | save a screenshot |
+| `mouse X Y` / `click X Y` | move the mouse / click, in 320x200 screen pixels |
 | `quit` | close the port |
 
-`KEY` is `left`, `right`, `up`, `down`, `space`, `esc`, `enter`, `pgup`, `pgdn` or a single
+`KEY` is `left`, `right`, `up`, `down`, `space`, `esc`, `enter`, `pgup`, `pgdn`, `f11` or a single
 character, or a control on a virtual game controller: `pad_a`, `pad_b`, `pad_x`, `pad_start`,
 `pad_back`, `pad_left`, `pad_right`, `pad_up` or `pad_down`.
 

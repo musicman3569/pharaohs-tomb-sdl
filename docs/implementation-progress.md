@@ -186,8 +186,16 @@ difference):
    blocks movement (e.g. interrupts a jump mid-flight) and other times not.
 2. Higher frame rate and smoother movement.
 3. Accurate hit detection. The current bounding boxes are too big an inaccurate.
-4. Fullscreen mode
-5. Menu mouse support and/or arrow/controller movement highlighting of options instead of letters/shortcuts
+4. ~~Fullscreen mode~~: done, `display.fullscreen` (a preference, off in both presets), F11 /
+   Alt+Enter; the pointer hides after 2 s still in fullscreen.
+5. ~~Menu mouse support and/or arrow/controller movement highlighting~~: done,
+   `menu.navigation` (classic off, enhanced on). `menu.c` finds the 8 options from MainMenu's own
+   DrawTextAt hot-key calls (each starts a label in its row's centred line), draws a colour-3
+   label + box, and keeps the selection between visits. Arrows (0 + scancode), the d-pad (as
+   arrows, PAD_MENU only), hover and click move it; Enter / Space / A / click choose. Clicks
+   elsewhere type Enter in PAD_MENU screens (`plat_menu_clicks` routes them to the menu while
+   it's up). Classic keeps the original's Up = 'H' (high scores) quirk. Script commands
+   `mouse X Y`, `click X Y` and the key `f11` test it.
 6. Graphics remaster from 3-color CGA to 256 colors
 
 ## How to work here (lessons from this session)
@@ -196,7 +204,8 @@ difference):
   Python.** The tool layer collapsed backslashes three times, producing NUL bytes and broken
   literals. Use the Write and Edit tools for source. (Python heredocs are fine for analysis.)
 - Test with `--script` (ticks are 18.2/s; commands `wait N; down KEY; up KEY; tap KEY;
-  shot FILE.png; quit`; keys `left right up down space esc enter pgup pgdn` or one character).
+  shot FILE.png; mouse X Y; click X Y; quit`; keys `left right up down space esc enter pgup
+  pgdn f11`, `pad_*`, or one character).
   `--level N` skips the menus. Output paths are relative to the working directory, so run from
   a temp folder.
 - For anything that saves, run against a copy: `cp game/PTOMB1.EXE game/PTOMB1.MNU

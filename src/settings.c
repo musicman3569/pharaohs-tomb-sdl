@@ -26,8 +26,13 @@ static const struct {
      "high-intensity colours. F2 switches"},
     {"display.aspect", T_BOOL, offsetof(settings_t, aspect_43), 0, 1, 1, 1,
      "stretch to 4:3, as a CRT showed it (off = square pixels). F3 switches"},
+    {"display.fullscreen", T_BOOL, offsetof(settings_t, fullscreen), 0, 1, 0, 0,
+     "start in fullscreen. F11 or Alt+Enter switches"},
     {"input.joystick", T_BOOL, offsetof(settings_t, joystick), 0, 1, 1, 1,
      "start with the joystick (game controller) on; the original started with it off"},
+    {"menu.navigation", T_BOOL, offsetof(settings_t, navigation), 0, 1, 0, 1,
+     "main menu cursor: arrows / d-pad / mouse move it, Enter / Space / A / click choose; clicks\n"
+     "; also work as a key on \"press any key\" screens. Off = the original's letter keys only"},
 };
 #define N_SETTINGS (sizeof table / sizeof table[0])
 

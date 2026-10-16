@@ -13,6 +13,7 @@
  * and, as a port extra so the game can be played without a keyboard, some buttons also type
  * keys, depending on what the game is doing (pad_set_mode):
  *   menus and "press any key":  A, Start -> Enter    B -> Esc
+ *                               d-pad -> arrow keys (with menu.navigation on)
  *   in game:                    Start -> P (pause)   Back -> Esc (quit prompt)
  *   QUIT (Y/N)?:                A, Start -> Y        B, Back -> N
  */
@@ -47,6 +48,7 @@ typedef enum { PAD_MENU, PAD_GAME, PAD_YESNO } pad_mode_t;
 
 /* Which keys the controller's buttons type (see above). Returns the previous mode. */
 pad_mode_t pad_set_mode(pad_mode_t mode);
+pad_mode_t pad_get_mode(void);
 
 /* Platform side (platform.c). */
 union SDL_Event;

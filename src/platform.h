@@ -47,6 +47,15 @@ void plat_pace(int hz);
 /* Port extra: PgUp / PgDn pressed since the last call (-1, 0 or +1). */
 int plat_take_level_step(void);
 
+/* Port extra (menu.navigation): where the mouse is, in 320x200 screen pixels, or -1, -1 when
+ * it's outside the picture. */
+void plat_mouse_pos(int *x, int *y);
+
+/* While on, left clicks are queued for plat_take_click (the main menu's cursor). While off,
+ * with menu.navigation on, a click in a menu or "press any key" screen types Enter. */
+void plat_menu_clicks(bool on);
+bool plat_take_click(int *x, int *y);
+
 /* Crt Sound / NoSound: PC speaker square wave. */
 void plat_sound(int hz);
 void plat_nosound(void);

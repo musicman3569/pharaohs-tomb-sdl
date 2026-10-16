@@ -6,6 +6,7 @@
 
 #include "platform.h"
 #include "platform_sdl.h"
+#include "settings.h"
 
 /* The original switches the joystick off at startup (main, 1000:84A8) until the J menu turns it
  * on. The port starts with it on (main.c sets it from input.joystick in settings.h), so a
@@ -32,6 +33,11 @@ pad_mode_t pad_set_mode(pad_mode_t m)
     const pad_mode_t old = mode;
     mode = m;
     return old;
+}
+
+pad_mode_t pad_get_mode(void)
+{
+    return mode;
 }
 
 /* --- controllers coming and going ---------------------------------------------------------- */
@@ -189,6 +195,17 @@ static void button_down(SDL_GameControllerButton b)
             key = 13;
         else if (b == SDL_CONTROLLER_BUTTON_B)
             key = 27;
+        else if (settings.navigation) { /* the d-pad as arrow keys: 0, then the scancode */
+            static const struct { SDL_GameControllerButton b; int scan; } arrows[] = {
+                {SDL_CONTROLLER_BUTTON_DPAD_UP, 0x48}, {SDL_CONTROLLER_BUTTON_DPAD_DOWN, 0x50},
+                {SDL_CONTROLLER_BUTTON_DPAD_LEFT, 0x4B}, {SDL_CONTROLLER_BUTTON_DPAD_RIGHT, 0x4D},
+            };
+            for (size_t i = 0; i < sizeof arrows / sizeof arrows[0]; i++)
+                if (b == arrows[i].b) {
+                    plat_push_key(0);
+                    plat_push_key(arrows[i].scan);
+                }
+        }
         break;
     case PAD_GAME:
         if (b == SDL_CONTROLLER_BUTTON_START)

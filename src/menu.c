@@ -9,6 +9,7 @@
 #include "pcx.h"
 #include "platform.h"
 #include "screenvm.h"
+#include "settings.h"
 #include "text.h"
 #include "tp.h"
 
@@ -50,6 +51,8 @@ static FILE *open_either_case(const char *dir, const char *name, const char *mod
     return NULL;
 }
 
+static void find_menu_options(void);
+
 int menu_init(const gamedata_t *g, char *err, size_t errlen)
 {
     data = g;
@@ -78,6 +81,7 @@ int menu_init(const gamedata_t *g, char *err, size_t errlen)
         n_title_ops = gamedata_text_ops(g, g->fn_title_screen, 0x200, 0, title_ops, 24);
     if (g->fn_main_menu)
         n_menu_ops = gamedata_text_ops(g, g->fn_main_menu, 0x1A0, 0, menu_ops, 32);
+    find_menu_options();
     if (g->fn_high_scores)
         n_hs_ops = gamedata_text_ops(g, g->fn_high_scores, 0x60, 0, hs_ops, 8);
     if (g->fn_game_over)
@@ -88,6 +92,132 @@ int menu_init(const gamedata_t *g, char *err, size_t errlen)
 int menu_key_layout(void)
 {
     return cfg_layout;
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Port enhancement (menu.navigation): a cursor on the main menu                              */
+
+/* The options are found from the menu's own drawing calls: each hot-key letter (DrawTextAt,
+ * colour 1) starts a label inside the centred line on its row (DrawTextCentered). */
+typedef struct {
+    int col, row, len; /* text cells */
+    char label[40];
+} menu_option_t;
+
+static menu_option_t options[8];
+static int n_options;
+static int options_font = -1; /* the font the labels are drawn in */
+static int selected;          /* kept between visits to the menu */
+
+static void find_menu_options(void)
+{
+    const text_op_t *line = NULL;
+    int font = -1;
+    for (int i = 0; i < n_menu_ops && n_options < 8; i++) {
+        const text_op_t *op = &menu_ops[i];
+        if (op->kind == OP_FONT)
+            font = op->a;
+        if (op->kind == OP_CENTER) {
+            line = op;
+            options_font = font;
+        }
+        if (op->kind != OP_AT || !line || line->b != op->b)
+            continue;
+        const int len = (int)strlen(line->text);
+        const int off = op->a - ((40 - len) / 2 + 1); /* DrawTextCentered's column */
+        if (off < 0 || off >= len)
+            continue;
+        menu_option_t *o = &options[n_options];
+        int n = 0;
+        while (off + n < len && n < (int)sizeof o->label - 1 &&
+               !(line->text[off + n] == ' ' && line->text[off + n + 1] == ' '))
+            n++;
+        while (n > 0 && line->text[off + n - 1] == ' ')
+            n--;
+        if (n == 0)
+            continue;
+        memcpy(o->label, line->text + off, (size_t)n);
+        o->label[n] = '\0';
+        o->col = op->a;
+        o->row = op->b;
+        o->len = n;
+        n_options++;
+    }
+}
+
+/* The box drawn round an option, in screen pixels. */
+static void option_box(const menu_option_t *o, int *x0, int *y0, int *x1, int *y1)
+{
+    *x0 = (o->col - 1) * 8 - 3;
+    *x1 = (o->col - 1 + o->len) * 8 + 2;
+    *y0 = (o->row - 1) * 8 - 3;
+    *y1 = o->row * 8 + 2;
+}
+
+/* Redraw an option highlighted (label in colour 3, boxed) or as the original drew it. */
+static void draw_option(int i, bool on)
+{
+    const menu_option_t *o = &options[i];
+    text_select_font(data, (font_id_t)options_font);
+    text_color(on ? 3 : 2);
+    text_draw_at(o->col, o->row, o->label);
+    const char key[2] = {o->label[0], '\0'};
+    text_color(1);
+    text_draw_at(o->col, o->row, key);
+    int x0, y0, x1, y1;
+    option_box(o, &x0, &y0, &x1, &y1);
+    const int c = on ? 3 : 0;
+    g3_draw(x0, y0, x1, y0, c);
+    g3_draw(x0, y1, x1, y1, c);
+    g3_draw(x0, y0, x0, y1, c);
+    g3_draw(x1, y0, x1, y1, c);
+}
+
+static void select_option(int i)
+{
+    if (i == selected)
+        return;
+    draw_option(selected, false);
+    selected = i;
+    draw_option(selected, true);
+}
+
+static int option_at(int x, int y)
+{
+    for (int i = 0; i < n_options; i++) {
+        int x0, y0, x1, y1;
+        option_box(&options[i], &x0, &y0, &x1, &y1);
+        if (x >= x0 && x <= x1 && y >= y0 && y <= y1)
+            return i;
+    }
+    return -1;
+}
+
+/* An arrow key's scancode: move to the nearest option that way. */
+static void move_selection(int scancode)
+{
+    const menu_option_t *cur = &options[selected];
+    int best = -1, best_score = 0;
+    for (int i = 0; i < n_options; i++) {
+        const int dr = options[i].row - cur->row, dc = options[i].col - cur->col;
+        int score;
+        if (scancode == 0x48 && dr < 0)            /* up */
+            score = -dr * 100 + (dc < 0 ? -dc : dc);
+        else if (scancode == 0x50 && dr > 0)       /* down */
+            score = dr * 100 + (dc < 0 ? -dc : dc);
+        else if (scancode == 0x4B && dc < 0)       /* left */
+            score = (dr < 0 ? -dr : dr) * 100 - dc;
+        else if (scancode == 0x4D && dc > 0)       /* right */
+            score = (dr < 0 ? -dr : dr) * 100 + dc;
+        else
+            continue;
+        if (best < 0 || score < best_score) {
+            best = i;
+            best_score = score;
+        }
+    }
+    if (best >= 0)
+        select_option(best);
 }
 
 static void save_config(int layout)
@@ -218,14 +348,45 @@ void menu_main(bool cheat_from_command_line)
             }
         }
         flush_keyboard(); /* 1000:5C05: drops the key that ended the title demo (or a screen) */
+        const bool cursor = settings.navigation && n_options > 0;
+        int mx_was = -1, my_was = -1;
+        if (cursor) {
+            draw_option(selected, true);
+            plat_menu_clicks(true);
+            plat_mouse_pos(&mx_was, &my_was); /* a pointer that isn't moved doesn't select */
+        }
         bat_t b1 = {50, 1, 1}, b2 = {260, 1, 1};
         int key = '!';
         for (;;) {
             bats_step(&b1, &b2);
             tp_random(0x7FFF);
-            if (plat_key_pressed())
+            if (plat_key_pressed()) {
                 key = plat_read_key();
+                /* In the original an arrow key is 0 and then its scancode, read as a letter
+                 * the next time round: Up (48h) is 'H' and opens the high scores. Kept unless
+                 * the cursor is on. */
+                if (cursor && key == 0) {
+                    move_selection(plat_read_key());
+                    key = '!';
+                } else if (cursor && (key == '\r' || key == ' ')) {
+                    key = options[selected].label[0];
+                }
+            }
+            if (cursor) {
+                int mx, my;
+                plat_mouse_pos(&mx, &my);
+                if ((mx != mx_was || my != my_was) && option_at(mx, my) >= 0)
+                    select_option(option_at(mx, my));
+                mx_was = mx;
+                my_was = my;
+                if (plat_take_click(&mx, &my) && option_at(mx, my) >= 0) {
+                    select_option(option_at(mx, my));
+                    key = options[selected].label[0];
+                }
+            }
             const int c = upcase(key);
+            if (cursor && menu_key_valid(c))
+                plat_menu_clicks(false); /* the screen it opens takes clicks as keys */
             if (c == 'E' || c == ' ' || c == '\r') {
                 game_play(1, cheat_from_command_line); /* PlayGame starts at [75FE] = 1 */
                 g3_graph_color_mode();

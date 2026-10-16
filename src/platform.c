@@ -20,6 +20,12 @@ static SDL_Texture *tex;
 static SDL_AudioDeviceID audio;
 
 static int shot_no;
+
+/* The mouse (menu.navigation) */
+static int mouse_x = -1, mouse_y = -1;
+static bool menu_clicks, click_pending;
+static int click_x, click_y;
+static Uint32 mouse_moved_at; /* fullscreen hides the pointer when it isn't being used */
 static bool quitting;
 static int level_step;
 
@@ -190,6 +196,11 @@ static void present(void)
     SDL_RenderCopy(ren, tex, NULL, &dst);
     SDL_RenderPresent(ren);
 
+    if (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN_DESKTOP)
+        SDL_ShowCursor(SDL_GetTicks() - mouse_moved_at < 2000 ? SDL_ENABLE : SDL_DISABLE);
+    else
+        SDL_ShowCursor(SDL_ENABLE);
+
     if (title_dirty) {
         char title[400];
         snprintf(title, sizeof title, "Pharaoh's Tomb - %s%s%s", message_text[0] ? message_text : "",
@@ -235,11 +246,85 @@ static void push_extended(int scancode)
     push_key(scancode);
 }
 
+static void toggle_fullscreen(void)
+{
+    settings.fullscreen = !settings.fullscreen; /* for this run; ptomb.ini isn't changed */
+    SDL_SetWindowFullscreen(win, settings.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+}
+
+/* A window position to 320x200 screen pixels, through the same fit as present(). */
+static void window_to_screen(int wx, int wy, int *x, int *y)
+{
+    int ww, wh, ow, oh;
+    SDL_GetWindowSize(win, &ww, &wh);
+    SDL_GetRendererOutputSize(ren, &ow, &oh);
+    const SDL_Rect r = fit_rect(ow, oh);
+    const double px = (double)wx * ow / (ww ? ww : 1), py = (double)wy * oh / (wh ? wh : 1);
+    *x = (int)((px - r.x) * CGA_W / r.w);
+    *y = (int)((py - r.y) * CGA_H / r.h);
+    if (px < r.x || py < r.y || *x >= CGA_W || *y >= CGA_H)
+        *x = *y = -1;
+}
+
+/* A left click at (mouse_x, mouse_y). */
+static void mouse_click(void)
+{
+    if (!settings.navigation)
+        return;
+    if (menu_clicks) {
+        click_pending = true;
+        click_x = mouse_x;
+        click_y = mouse_y;
+    } else if (pad_get_mode() == PAD_MENU) {
+        push_key(13);
+    }
+}
+
+static void mouse_event(const SDL_Event *ev)
+{
+    if (ev->type == SDL_MOUSEMOTION) {
+        window_to_screen(ev->motion.x, ev->motion.y, &mouse_x, &mouse_y);
+        mouse_moved_at = SDL_GetTicks();
+    } else if (ev->type == SDL_MOUSEBUTTONDOWN && ev->button.button == SDL_BUTTON_LEFT) {
+        window_to_screen(ev->button.x, ev->button.y, &mouse_x, &mouse_y);
+        mouse_moved_at = SDL_GetTicks();
+        mouse_click();
+    }
+}
+
+void plat_mouse_pos(int *x, int *y)
+{
+    *x = mouse_x;
+    *y = mouse_y;
+}
+
+void plat_menu_clicks(bool on)
+{
+    menu_clicks = on;
+    click_pending = false;
+}
+
+bool plat_take_click(int *x, int *y)
+{
+    if (!click_pending)
+        return false;
+    click_pending = false;
+    *x = click_x;
+    *y = click_y;
+    return true;
+}
+
 /* Map an SDL key press to what the BIOS would put in its buffer. */
 static void key_down(const SDL_KeyboardEvent *k)
 {
     const SDL_Keycode sym = k->keysym.sym;
     const bool shift = (k->keysym.mod & KMOD_SHIFT) != 0;
+
+    if ((sym == SDLK_RETURN && (k->keysym.mod & KMOD_ALT)) || sym == SDLK_F11) {
+        if (!k->repeat)
+            toggle_fullscreen();
+        return;
+    }
 
     switch (sym) {
     /* front-end keys, not seen by the game */
@@ -310,8 +395,9 @@ shift_keys_t plat_shift_keys(void)
 /* --- scripted input (--script) ------------------------------------------------------------- */
 
 /* Commands separated by ';', timed in timer ticks (18.2 per second):
- *   wait N | down KEY | up KEY | tap KEY | shot FILE.png | quit
- * KEY is left, right, up, down, space, esc, enter, or a single character, or a control on a
+ *   wait N | down KEY | up KEY | tap KEY | shot FILE.png | mouse X Y | click X Y | quit
+ * (mouse and click are in 320x200 screen pixels)
+ * KEY is left, right, up, down, space, esc, enter, pgup, pgdn, f11, or a single character, or a control on a
  * virtual game controller: pad_a, pad_b, pad_x, pad_start, pad_back, pad_left, ... (gamepad.h). */
 static char script_buf[4096];
 static char *script_pos;
@@ -323,7 +409,7 @@ static SDL_Keycode key_by_name(const char *name)
     static const struct { const char *name; SDL_Keycode sym; } names[] = {
         {"left", SDLK_LEFT}, {"right", SDLK_RIGHT}, {"up", SDLK_UP}, {"down", SDLK_DOWN},
         {"space", SDLK_SPACE}, {"esc", SDLK_ESCAPE}, {"enter", SDLK_RETURN}, {"pgdn", SDLK_PAGEDOWN},
-        {"pgup", SDLK_PAGEUP},
+        {"pgup", SDLK_PAGEUP}, {"f11", SDLK_F11},
     };
     for (size_t i = 0; i < sizeof names / sizeof names[0]; i++)
         if (!strcmp(name, names[i].name))
@@ -363,7 +449,9 @@ static void run_script(void)
         if (end)
             *end = '\0';
         char cmd[16] = "", arg[256] = "";
+        int mx = -1, my = -1;
         sscanf(script_pos, " %15s %255s", cmd, arg);
+        sscanf(script_pos, " %*s %d %d", &mx, &my);
         script_pos = end ? end + 1 : NULL;
 
         if (!strcmp(cmd, "wait"))
@@ -380,6 +468,11 @@ static void run_script(void)
         } else if (!strcmp(cmd, "shot")) {
             if (cga_write_png(arg, cga_palette(settings.palette, settings.bright), 2) == 0)
                 printf("[tick %u] saved %s  %s\n", tick_total, arg, status_text);
+        } else if (!strcmp(cmd, "mouse") || !strcmp(cmd, "click")) {
+            mouse_x = mx;
+            mouse_y = my;
+            if (cmd[0] == 'c')
+                mouse_click();
         } else if (!strcmp(cmd, "quit"))
             quitting = true;
     }
@@ -399,6 +492,8 @@ void plat_poll(void)
             key_up(&ev.key);
         else if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
             isr_keys.left = isr_keys.right = false; /* don't leave a key "held" */
+        else if (ev.type == SDL_MOUSEMOTION || ev.type == SDL_MOUSEBUTTONDOWN)
+            mouse_event(&ev);
         else
             pad_event(&ev);
     }
@@ -490,7 +585,8 @@ int plat_init(char *err, size_t errlen)
     }
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     win = SDL_CreateWindow("Pharaoh's Tomb", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 960,
-                           SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+                           SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI |
+                               (settings.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0));
     ren = win ? SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC) : NULL;
     tex = ren ? SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, CGA_W, CGA_H) : NULL;
     if (!tex) {
