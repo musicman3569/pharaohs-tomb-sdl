@@ -31,13 +31,29 @@ in the original, using the game's own fonts from the EXE plus the port's own 8x8
 plain ASCII (standing in for the IBM BIOS font, which can't be shipped). It **starts like the
 original**: the title picture and walking demo, then the main menu with instructions, story,
 ordering info, keyboard setup, joystick screen and high scores (read from and saved to the
-game's own `PTOMBn.HS`, so existing scores carry over). Saving and restoring games (S / R) works with the original's `.SAV` files. The end-of-volume pages run after level 20. **Game controllers**
-work (see below). Not yet: the exact Genus picture-transition effects (approximated as wipes).
+game's own `PTOMBn.HS`, so existing scores carry over). Saving and restoring games (S / R)
+works with the original's `.SAV` files. The end-of-volume pages run after level 20. **Game
+controllers** work (see below). Not yet: the exact Genus picture-transition effects
+(approximated as wipes), and nothing has been compared side by side with the original running.
 
-The port reads `PTOMBn.MNU`, `PTOMBn.HS`, `PTOMBn.SAV` and `PTOMB.CFG` from the folder the EXE is in, and
-**writes** `PTOMBn.HS` (a new high score), `PTOMB.CFG` (Config Keyboard) and `PTOMBn.SAV`
-(S in game) there, as the
-original does.
+The port reads `PTOMBn.MNU`, `PTOMBn.HS`, `PTOMBn.SAV` and `PTOMB.CFG` from the folder the EXE
+is in, and **writes** `PTOMBn.HS` (a new high score), `PTOMB.CFG` (Config Keyboard) and
+`PTOMBn.SAV` (S in game) there, as the original does.
+
+### Getting the game
+
+The port needs the original game files, which Apogee released as freeware in 2009. They come
+as `tombfree.zip` (217 KB, all four volumes) from either of these:
+
+- [DOS Games Archive: Pharaoh's Tomb](https://www.dosgamesarchive.com/download/pharaohs-tomb)
+  (the game's page, which can also run it in the browser), or its
+  [direct download](https://www.dosgamesarchive.com/file/pharaohs-tomb/tombfree)
+- [Dukeworld: Apogee freeware archive](https://dukeworld.com/2001-current/apogee%20freeware/)
+  (a folder of Apogee's freeware releases; pick `tombfree.zip`)
+
+Unzip it next to `ptomb.exe` (for a release download) or into `game/` (when building from
+source). The port only needs `PTOMBn.EXE` and `PTOMBn.MNU`; the other files are created as
+you play.
 
 ### Build (Windows, MSYS2 mingw64)
 
@@ -57,6 +73,10 @@ commands work with SDL2 installed through your package manager.
 ```
 build/ptomb.exe game/PTOMB1.EXE
 ```
+
+With a release download, double-click `ptomb.exe` in the folder with the game files to play
+volume 1, or run `ptomb.exe PTOMB2.EXE` (and so on) for the others. Dropping a `PTOMBn.EXE`
+onto `ptomb.exe` works too.
 
 Menu keys as in the original: E, Space or Enter to play, I instructions, S story, H high scores,
 O ordering info, C config keyboard, J joystick, Q quit.
@@ -126,3 +146,9 @@ python tools/unlzexe.py game/PTOMB1.EXE unpacked/PTOMB1.EXE
 Then import `unpacked/PTOMB1.EXE` into Ghidra (format: Old-style DOS Executable (MZ)), run
 auto-analysis, and apply the known names with
 `python tools/ghidra_rename.py analysis/PTOMB1.names.txt` (needs GhidraMCP running).
+
+## License
+
+The port's source code and tools are released under the MIT License (see `LICENSE`). That
+covers this repository only: Pharaoh's Tomb itself is (c) 1990 Micro F/X and Apogee Software,
+distributed as freeware, and none of its files are included here.
