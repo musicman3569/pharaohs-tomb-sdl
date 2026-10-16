@@ -35,23 +35,112 @@ static SDL_atomic_t speaker_hz;
 
 /* --- audio: PC speaker square wave --------------------------------------------------------- */
 
+/* Short queued tones (plat_sound_blip). Written by the game thread under the audio lock. */
+typedef struct {
+    int hz;
+    int samples; /* remaining samples of this entry */
+} blip_t;
+static blip_t blips[2048];
+static int blip_head, blip_tail;
+static int audio_rate = 44100;
+
+/* --record-audio: keep every sample played, written as a WAV file on shutdown. */
+static const char *record_path;
+static Sint16 *record_buf;
+static size_t record_len, record_cap;
+
+static void record_samples(const Sint16 *s, int n)
+{
+    if (record_len + (size_t)n > record_cap) {
+        size_t cap = record_cap ? record_cap * 2 : 1 << 20;
+        while (cap < record_len + (size_t)n)
+            cap *= 2;
+        Sint16 *grown = SDL_realloc(record_buf, cap * sizeof *grown);
+        if (!grown)
+            return;
+        record_buf = grown;
+        record_cap = cap;
+    }
+    SDL_memcpy(record_buf + record_len, s, (size_t)n * sizeof *s);
+    record_len += (size_t)n;
+}
+
+void plat_record_audio(const char *path)
+{
+    record_path = path;
+}
+
+static void write_recording(void)
+{
+    if (!record_path || !record_buf)
+        return;
+    FILE *f = fopen(record_path, "wb");
+    if (!f)
+        return;
+    const Uint32 data = (Uint32)(record_len * 2), rate = (Uint32)audio_rate;
+    const Uint8 hdr[44] = {
+        'R', 'I', 'F', 'F', (Uint8)(data + 36), (Uint8)((data + 36) >> 8), (Uint8)((data + 36) >> 16),
+        (Uint8)((data + 36) >> 24), 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ', 16, 0, 0, 0, 1, 0, 1, 0,
+        (Uint8)rate, (Uint8)(rate >> 8), (Uint8)(rate >> 16), (Uint8)(rate >> 24),
+        (Uint8)(rate * 2), (Uint8)((rate * 2) >> 8), (Uint8)((rate * 2) >> 16), (Uint8)((rate * 2) >> 24),
+        2, 0, 16, 0, 'd', 'a', 't', 'a', (Uint8)data, (Uint8)(data >> 8), (Uint8)(data >> 16),
+        (Uint8)(data >> 24),
+    };
+    fwrite(hdr, 1, sizeof hdr, f);
+    fwrite(record_buf, 2, record_len, f); /* little-endian hosts only, fine for a test aid */
+    fclose(f);
+    printf("recorded %s (%.1f s)\n", record_path, (double)record_len / rate);
+}
+
 static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
     static double phase;
-    const int rate = *(int *)userdata;
+    (void)userdata;
     Sint16 *out = (Sint16 *)stream;
     const int n = len / (int)sizeof(Sint16);
-    const int hz = SDL_AtomicGet(&speaker_hz);
+    const int steady = SDL_AtomicGet(&speaker_hz);
     for (int i = 0; i < n; i++) {
+        int hz = steady;
+        if (blip_head != blip_tail) {
+            blip_t *b = &blips[blip_head];
+            hz = b->hz;
+            if (--b->samples <= 0)
+                blip_head = (blip_head + 1) % (int)(sizeof blips / sizeof blips[0]);
+        }
         if (hz <= 0) {
             out[i] = 0;
             continue;
         }
-        phase += (double)hz / rate;
+        phase += (double)hz / audio_rate;
         if (phase >= 1.0)
             phase -= (int)phase;
         out[i] = phase < 0.5 ? 2500 : -2500;
     }
+    if (record_path)
+        record_samples(out, n);
+}
+
+static void queue_blip(int hz, int us)
+{
+    const int samples = (int)((long long)us * audio_rate / 1000000);
+    if (samples <= 0)
+        return;
+    const int next = (blip_tail + 1) % (int)(sizeof blips / sizeof blips[0]);
+    if (next == blip_head)
+        return; /* queue full: drop */
+    blips[blip_tail].hz = hz;
+    blips[blip_tail].samples = samples;
+    blip_tail = next;
+}
+
+void plat_sound_blip(int hz, int on_us, int off_us)
+{
+    if (!audio)
+        return;
+    SDL_LockAudioDevice(audio);
+    queue_blip(hz > 18 ? hz : 0, on_us); /* Crt Sound ignores hz <= 18 */
+    queue_blip(0, off_us);
+    SDL_UnlockAudioDevice(audio);
 }
 
 void plat_sound(int hz)
@@ -375,7 +464,6 @@ int plat_init(int pal, int bri, char *err, size_t errlen)
         return -1;
     }
 
-    static int rate;
     SDL_AudioSpec want, have;
     SDL_zero(want);
     want.freq = 44100;
@@ -383,10 +471,10 @@ int plat_init(int pal, int bri, char *err, size_t errlen)
     want.channels = 1;
     want.samples = 512;
     want.callback = audio_callback;
-    want.userdata = &rate;
+    want.userdata = NULL;
     audio = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
     if (audio) {
-        rate = have.freq;
+        audio_rate = have.freq;
         SDL_PauseAudioDevice(audio, 0);
     } /* no audio device: carry on silently */
 
@@ -399,6 +487,7 @@ void plat_shutdown(void)
 {
     if (audio)
         SDL_CloseAudioDevice(audio);
+    write_recording();
     SDL_DestroyTexture(tex);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);

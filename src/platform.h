@@ -42,6 +42,11 @@ void plat_delay(int ticks);
 void plat_sound(int hz);
 void plat_nosound(void);
 
+/* Queue a short tone (on_us at hz, then off_us of silence) without blocking. Stands in for the
+ * original's sweeps with no delays, whose length was set by CPU speed. Queued tones play
+ * before the steady Sound() tone. */
+void plat_sound_blip(int hz, int on_us, int off_us);
+
 /* Status text. The status bar is drawn in the BIOS font, which the port can't ship, so for
  * now it goes in the window title. */
 void plat_status(const char *text);

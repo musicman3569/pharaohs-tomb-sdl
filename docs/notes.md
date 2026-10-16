@@ -249,6 +249,43 @@ copies into `[797B]`. `+` is read through Crt `ReadKey`, so either `+` key works
 | Main menu | Scroll Lock on, `+` | `[795D]` = 1, then start the game. **Invincible + unlimited spears**: `KillPlayer` takes a life and then gives it back, and `PlayerFire` does the same with the spear. Dying still plays the death animation and restarts the level. `ResetGameState` clears the flag, so it lasts for one game. |
 | In game | Scroll Lock on, `+` | `CheatSkipLevel` (1000:3AD7): if level < 20, carry spears / T count / treasure over like a normal exit, +1,000 points, start the next level. Works with or without cheat mode. |
 
+## Sound effects
+
+Everything goes through Crt `Sound(hz)` / `NoSound` (PC speaker, PIT channel 2). Crt ignores
+`hz <= 18`, so a `Sound(0)` keeps the previous tone playing.
+
+**1854:15F0 Sweep(lo, hi, gap, hold, step, up, staccato, enabled)** (8 words, `RETF 10h`):
+if `enabled` (the sound-on flag `[7994]`), start at `lo` (up) or `hi` (down) and repeat
+`Delay(gap); freq +-= step; Sound(freq); Delay(hold); if staccato NoSound` until
+`freq >= hi` (up) or `freq <= lo` (down), then `NoSound`. Delays are timer ticks; the last
+step's tone is cut off at once unless `hold > 0`.
+
+| Caller | Effect | lo | hi | gap | hold | step | dir | staccato |
+|--------|--------|----|----|-----|------|------|-----|----------|
+| 1854:58D2 SfxPickup | keys, spears, switches, T | 500 | 2000 | 0 | 0 | 10 | up | no |
+| 1854:592F SfxBonus | spears full, extra life, 100 treasure, 5 Ts | 10 | 3000 | 1 | 1 | 750 | up | yes |
+| 1854:595F SfxDeath | KillPlayer | 100 | 1000 | 1 | 1 | 200 | down | no |
+| 1854:598F SfxUnlock | keyhole, magenta lock | 1500 | 3000 | 1 | 0 | 200 | up | no |
+| 1854:5900 SfxEnemyKilled | spear hits a walker / bat | 100 | 8000 | 1 | 0 | 2000 | up | no |
+| 1000:00B9 SfxArtifact | artifacts (codes 1A-1D) | 100 | 5000 | 2 | 0 | 500 | up | no |
+| PlayerFire (1000:4ED5) | spear throw | 500 | 3000 | 1 | 0 | 1000 | up | no |
+| TouchTile (1000:4222, 43DA) | crumble / build bricks | 1000 | 3000 | 0 | 0 | 500 | down | yes |
+| TouchTile (1000:44D9) | invisibility trap | 100 | 5000 | 1 | 1 | 1000 | up | yes |
+| TouchTile (1000:461F) | freeze | 1000 | 10000 | 1 | 1 | 1000 | down | yes |
+
+Other sounds are direct Sound/NoSound calls: footsteps (50 Hz click, 1000:380B), jump
+(`[75F4]` x 1000 Hz rising, first 10 steps), treasure counting (8000 Hz, Delay(1) each), hidden
+bonus count-up (`i*100 + 1000` Hz), door slides (`Random(100)` Hz), block pushes
+(`Random(200)` Hz), dart trap (500 Hz for 1 tick, 1854:58A7).
+
+**Sweeps with gap = hold = 0** (pickup, crumble) last only as long as the CPU takes: about 600
+cycles per step, ~125 us on a 4.77 MHz 8088, so the pickup chirp was ~19 ms on an IBM PC
+and shorter on faster machines. The port queues those steps to the audio thread at 125 us
+each instead of blocking. All other sweeps run in real time and block, as in the original.
+
+Verified with `--record-audio`: recordings of `--sound-test` and a level-16 run show the
+frequencies, step lengths (1 tick = 55 ms), staccato gaps and cut-off last steps above.
+
 ## Hardware hooks (what the port replaces)
 
 | Hook                  | Where              | Behaviour                                                |
@@ -385,8 +422,7 @@ vertical hazards, elevators and bats moving (levels 2, 3, 5, 9). On level 16, a 
 right-hand walker (+250) and the left one kills the player. Freeze and the dart traps are ported
 but haven't been exercised in a scripted run yet.
 
-Not done yet: sound effects (1854:58D2 / 592F / 595F / 598F / 5900 / 15F0 are silent; direct
-Sound/NoSound calls are real), the status bar text (BIOS font; shown in the window title),
+Not done yet: the status bar text (BIOS font; shown in the window title),
 level names, the menus, save/restore, high scores, the joystick, the volume ending, and
 StartLevel's calls 1854:114F / 10A3. The glint off-by-one (entry 0 at (0, 0)) is kept on
 purpose.

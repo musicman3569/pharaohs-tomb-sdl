@@ -5,6 +5,7 @@
 
 #include "graph3.h"
 #include "platform.h"
+#include "sound.h"
 #include "timer.h"
 #include "tp.h"
 
@@ -67,19 +68,12 @@ static void add_score(double points)
     G.score += points;
 }
 
-/* Sound effects (1854:58D2, 592F, 595F, 598F, 15F0 ...) aren't decoded yet; they're silent for
- * now. Crt Sound/NoSound calls made directly by game code are real. */
-static void sfx(const char *what)
-{
-    (void)what;
-}
-
 /* DrawStatusBar (1000:0671): the bonuses it awards are game logic and are ported; the text
  * goes to the window title until the port has a font. */
 static void draw_status_bar(void)
 {
     if (G.treasure == 100) {
-        sfx("bonus");
+        sfx_bonus(G.sound_on);
         if (G.lives < 5)
             G.lives++;
         else
@@ -88,7 +82,7 @@ static void draw_status_bar(void)
         G.saved_treasure = 0;
     }
     if (G.t_count == 5) {
-        sfx("bonus");
+        sfx_bonus(G.sound_on);
         add_score(50000);
         G.t_count = 0;
         G.saved_t_count = 0;
@@ -321,7 +315,7 @@ static void player_fire(void)
         if (G.cheat)
             G.spears++;
         draw_status_bar();
-        sfx("throw");
+        sfx_sweep(500, 3000, 1, 0, 1000, true, false, G.sound_on);
     }
 }
 
@@ -362,7 +356,7 @@ static void game_over_screen(const char *why)
 /* 1000:34C3 */
 static void kill_player(void)
 {
-    sfx("death");
+    sfx_death(G.sound_on);
     for (int n = 1; n <= 4; n++)
         for (int f = 1; f <= 4; f++) {
             pic(SET_DEATH, f - 1, G.px, G.py);
@@ -427,7 +421,7 @@ static void crumble_or_build(unsigned char *trigger, int want, bool build)
                     pic(SET_CRUMBLE, f, (G.loop_c - 1) * 16, G.loop_r * 16);
                 plat_delay(1);
             }
-            sfx("crumble");
+            sfx_sweep(1000, 3000, 0, 0, 500, false, true, G.sound_on);
         }
 }
 
@@ -479,14 +473,14 @@ static void touch_tile(int x, int y)
         G.key_cyan = true;
         *cell = 0;
         blank(cx, cy);
-        sfx("pickup");
+        sfx_pickup(G.sound_on);
         player_walk(0);
         add_score(100);
         draw_status_bar();
         break;
     case 0x02: /* cyan keyhole: opens the exit doors */
         if (G.key_cyan) {
-            sfx("unlock");
+            sfx_unlock(G.sound_on);
             G.key_cyan = false;
             *cell = 0;
             blank(cx, cy);
@@ -501,10 +495,10 @@ static void touch_tile(int x, int y)
         blank(cx, cy);
         if (G.spears < 5) {
             G.spears++;
-            sfx("pickup");
+            sfx_pickup(G.sound_on);
             add_score(100);
         } else {
-            sfx("bonus");
+            sfx_bonus(G.sound_on);
             add_score(10000);
         }
         draw_status_bar();
@@ -524,13 +518,13 @@ static void touch_tile(int x, int y)
         *cell = 0;
         blank(cx, cy);
         player_walk(0);
-        sfx("pickup");
+        sfx_pickup(G.sound_on);
         add_score(100);
         draw_status_bar();
         break;
     case 0x08: /* magenta lock block */
         if (G.key_magenta) {
-            sfx("unlock");
+            sfx_unlock(G.sound_on);
             G.key_magenta = false;
             *cell = 0;
             blank(cx, cy);
@@ -547,7 +541,7 @@ static void touch_tile(int x, int y)
         break;
     case 0x0C: case 0x0E: case 0x10: { /* switch: build bricks at code+1 */
         add_score(100);
-        sfx("pickup");
+        sfx_pickup(G.sound_on);
         draw_status_bar();
         const int target = *cell + 1;
         blank(cx, cy);
@@ -565,7 +559,7 @@ static void touch_tile(int x, int y)
         *cell = 0;
         G.invisible = true;
         G.invis_timer = 1;
-        sfx("invisible");
+        sfx_sweep(100, 5000, 1, 1, 1000, true, true, G.sound_on);
         blank(G.px, G.py);
         draw_player();
         break;
@@ -573,7 +567,7 @@ static void touch_tile(int x, int y)
         *cell = 0;
         blank(cx, cy);
         add_score(1000);
-        sfx("pickup");
+        sfx_pickup(G.sound_on);
         G.t_count++;
         draw_status_bar();
         break;
@@ -582,7 +576,7 @@ static void touch_tile(int x, int y)
         blank(cx, cy);
         add_score(1000);
         draw_status_bar();
-        sfx("freeze");
+        sfx_sweep(1000, 10000, 1, 1, 1000, false, true, G.sound_on);
         G.frozen = true;
         G.freeze_count = 0;
         break;
@@ -609,7 +603,7 @@ static void touch_tile(int x, int y)
             pic(SET_JUMP_RIGHT, 1, cx, cy);
             if (G.lives < 5) {
                 G.lives++;
-                sfx("bonus");
+                sfx_bonus(G.sound_on);
                 draw_status_bar();
             } else {
                 for (int i = 1; i <= 10; i++) {
@@ -626,7 +620,7 @@ static void touch_tile(int x, int y)
         *cell = 0;
         blank(cx, cy);
         add_score(100000);
-        sfx("artifact");
+        sfx_artifact(G.sound_on);
         draw_status_bar();
         break;
     case 0xFF: /* exit */
@@ -702,7 +696,7 @@ static void spear_test(enemy_t *e)
             G.shot_x += G.shot_left ? 8 : -8;
             g3_draw(G.shot_x, G.shot_y, G.shot_x + 8, G.shot_y, 0);
             add_score(250);
-            sfx("kill"); /* 1854:5900 */
+            sfx_enemy_killed(G.sound_on);
             for (int f = 1; f <= 4; f++) {
                 pic(SET_SPARKLE, f - 1, e->x, e->y);
                 plat_delay(1);

@@ -12,6 +12,9 @@ int plat_take_level_step(void);
 
 void plat_present_now(void);
 
+/* Testing aids: capture all audio to a WAV file (call before plat_init). */
+void plat_record_audio(const char *path);
+
 /* Scripted input for testing, see platform.c. */
 void plat_set_script(const char *script);
 

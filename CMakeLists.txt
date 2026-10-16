@@ -10,6 +10,7 @@ add_executable(ptomb
     src/main.c
     src/platform.c
     src/game.c
+    src/sound.c
     src/cga.c
     src/graph3.c
     src/lzexe.c

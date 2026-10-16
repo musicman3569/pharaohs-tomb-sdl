@@ -19,6 +19,7 @@
 #include "level.h"
 #include "platform.h"
 #include "platform_sdl.h"
+#include "sound.h"
 
 /* GameTick runs flat out on the original hardware; anything speed-sensitive is paced by the
  * 18.2 Hz timer counters instead. Running it at a fixed 70 Hz keeps those counters from being
@@ -34,6 +35,8 @@ typedef struct {
     int cheat;
     const char *screenshot;
     const char *script;
+    const char *record_audio;
+    int sound_test;
 } options_t;
 
 static int parse_args(int argc, char **argv, options_t *o)
@@ -58,6 +61,10 @@ static int parse_args(int argc, char **argv, options_t *o)
             o->screenshot = argv[++i];
         else if (!strcmp(a, "--script") && i + 1 < argc)
             o->script = argv[++i];
+        else if (!strcmp(a, "--record-audio") && i + 1 < argc)
+            o->record_audio = argv[++i];
+        else if (!strcmp(a, "--sound-test"))
+            o->sound_test = 1;
         else if (a[0] == '-') {
             fprintf(stderr, "usage: ptomb [PTOMBn.EXE] [--level N] [--palette 0|1] [--bright] "
                             "[--keys 1|2|3] [--cheat] [--screenshot out.png]\n");
@@ -72,6 +79,31 @@ static void fail(const char *msg)
 {
     fprintf(stderr, "ptomb: %s\n", msg);
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Pharaoh's Tomb", msg, NULL);
+}
+
+/* --sound-test: play every sound effect once, named in the title bar. */
+static void sound_test(void)
+{
+    static const struct { const char *name; void (*play)(bool); } fx[] = {
+        {"pickup (1854:58D2)", sfx_pickup},     {"unlock (1854:598F)", sfx_unlock},
+        {"bonus (1854:592F)", sfx_bonus},       {"death (1854:595F)", sfx_death},
+        {"enemy killed (1854:5900)", sfx_enemy_killed}, {"artifact (1000:00B9)", sfx_artifact},
+    };
+    for (size_t i = 0; i < sizeof fx / sizeof fx[0] && !plat_quitting(); i++) {
+        plat_message(fx[i].name);
+        fx[i].play(true);
+        plat_delay(12);
+    }
+    static const struct { const char *name; int lo, hi, gap, hold, step, up, stacc; } sw[] = {
+        {"spear throw", 500, 3000, 1, 0, 1000, 1, 0},  {"crumble / build", 1000, 3000, 0, 0, 500, 0, 1},
+        {"invisibility", 100, 5000, 1, 1, 1000, 1, 1}, {"freeze", 1000, 10000, 1, 1, 1000, 0, 1},
+    };
+    for (size_t i = 0; i < sizeof sw / sizeof sw[0] && !plat_quitting(); i++) {
+        plat_message(sw[i].name);
+        sfx_sweep(sw[i].lo, sw[i].hi, sw[i].gap, sw[i].hold, sw[i].step, sw[i].up, sw[i].stacc, true);
+        plat_delay(12);
+    }
+    plat_message("");
 }
 
 static void new_game(const gamedata_t *data, const options_t *opt, int level)
@@ -107,12 +139,20 @@ int main(int argc, char **argv)
         return rc != 0;
     }
 
+    if (opt.record_audio)
+        plat_record_audio(opt.record_audio);
     if (plat_init(opt.palette, opt.bright, err, sizeof err) != 0) {
         fail(err);
         gamedata_free(&data);
         return 1;
     }
 
+    if (opt.sound_test) {
+        sound_test();
+        plat_shutdown();
+        gamedata_free(&data);
+        return 0;
+    }
     if (opt.script)
         plat_set_script(opt.script);
     new_game(&data, &opt, opt.level);

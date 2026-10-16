@@ -25,8 +25,9 @@ playable**. You can walk, jump, fall, throw spears, and pick up or trigger every
 (keys, locks, exit doors, treasure, hidden bricks, switches, spikes, the exit), with lives,
 score and level changes, and **all ten enemy types move and fight**: platforms, walkers you
 can spear, pushable blocks, vertical hazards, elevators, ceiling bats, dart traps, plus the
-freeze pickup. Not yet: sound effects (direct speaker beeps work), the status bar text (shown in
-the window title instead), the menus, saving, and the joystick.
+freeze pickup. **All the original PC-speaker sound effects** play (E toggles them, as in the
+game). Not yet: the status bar text (shown in the window title instead), the menus, saving,
+and the joystick.
 
 ### Build (Windows, MSYS2 mingw64)
 
@@ -72,8 +73,10 @@ Port keys:
 
 Command line: `--level N`, `--palette 0|1`, `--bright`, `--keys 1|2|3`, `--cheat` (the
 menu cheat: invincible, unlimited spears), `--screenshot out.png` (render one level to a file and
-exit) and `--script "..."` (scripted input for testing, e.g.
-`--script "wait 70; down right; wait 18; up right; shot a.png; quit"`, times in 18.2 Hz ticks).
+exit), `--sound-test` (play every sound effect once, named in the title bar), and two testing
+aids: `--script "..."` (scripted input, e.g.
+`--script "wait 70; down right; wait 18; up right; shot a.png; quit"`, times in 18.2 Hz ticks)
+and `--record-audio out.wav` (capture everything the speaker plays).
 
 ## Reverse engineering workflow
 
