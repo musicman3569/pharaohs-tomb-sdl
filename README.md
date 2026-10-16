@@ -3,6 +3,13 @@
 A personal learning project: reverse engineering Pharaoh's Tomb (Micro/FX / Apogee, 1990,
 re-released as freeware in 2009) with Ghidra, then porting it to run natively on modern systems.
 
+| | |
+|:---:|:---:|
+| ![The main menu](docs/screenshots/main-menu.png) | ![Level 1, At the Pyramid](docs/screenshots/level-01-at-the-pyramid.png) |
+| The main menu | Level 1: At the Pyramid |
+| ![Level 5, The Grand Gallery](docs/screenshots/level-05-the-grand-gallery.png) | ![Level 20, The Lost Tomb, in the original palette](docs/screenshots/level-20-the-lost-tomb-original-palette.png) |
+| Level 5: The Grand Gallery | Level 20: The Lost Tomb, in the original cyan/magenta palette (F1) |
+
 ## Layout
 
 | Path        | Contents                                                        |

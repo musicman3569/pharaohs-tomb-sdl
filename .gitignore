@@ -19,6 +19,7 @@ gfx/
 build/
 *.png
 !docs/*.png
+!docs/screenshots/*.png
 
 # Release packages
 dist/
