@@ -69,6 +69,53 @@ and score pop-ups (10K/12K/50K); 20-39 are enemies and effects.
 - **Collision reads the screen.** `GameTick` calls `Graph3_GetDotColor(x, y+2)` to decide whether the player
   falls. The port must keep a real 320x200 2 bpp framebuffer that game logic can read back.
 
+## Levels
+
+- **20 levels per volume, all different** (80 in total). Each level is **12 rows x 20 columns**
+  of characters, and each character is one 16x16 tile (20x16 = 320 px wide, 12x16 = 192 px tall).
+- Rows are `string[20]` constants in the main program's code segment (0x15 bytes each).
+  `StartLevel(level)` has one case per level that calls `DrawLevelRow(row, s)` 12 times.
+  Identical rows are shared between levels (e.g. `1000:6384` is the blank row).
+- `DrawLevelRow` compares each character against one-char string constants at
+  `1000:09D8..0A56` (64 of them). A match does some of:
+  - `PutPic` of a sprite at `x = (col-1)*16`, `y = row*16` (**Y is the bottom row** of the picture,
+    so the tile covers `y = row*16-15 .. row*16`);
+  - stores a tile code into the 12x20 map at DS:`7857 + row*20 + col` (cleared by StartLevel);
+  - calls `SpawnEnemy_guess` (1854:64FB) and/or `DrawSpecialTile_guess` (1854:59BE).
+- After the rows, StartLevel draws a line at y=189 and the status bar below it.
+- `tools/render_levels.py` reads all of this straight from an unpacked EXE by byte pattern
+  (no Ghidra needed) and writes `levelNN.png` + `levelNN.txt` + `levels_sheet.png`. Use
+  `--table` to print the tile table below.
+
+### Tile characters (PTOMB1; same in all volumes)
+
+Sprite = set/frame from the sprite table above. Map = tile code written to the map ("--" = none).
+
+| Char | Map | Sprite | Extra | | Char | Map | Sprite | Extra |
+|------|-----|--------|-------| |------|-----|--------|-------|
+| `.`  | 0A | 4/0  | | | `l` `L` | -- | 10/1 | enemy |
+| `>`  | 0B | none | | | `m` `M` | -- | 10/3 | enemy |
+| `~ ! @ #` | -- | 5/0-3 | slopes | | `n` | -- | 11/3 | enemy |
+| `$ % ^ &` | -- | 6/0-3 | slopes | | `p` | 03 | 10/0 | |
+| `* ( ) _` | -- | 7/0-3 | | | `q` | -- | 12/2 (x2) | enemy |
+| `+` `\`   | -- | 8/0 | enemy (dir +1 / -1) | | `r` | 07 | 11/0 | |
+| `\| ` `` ` `` `-` | 09 | 8/1-3 | | | `s` `S` | -- | drawn by 59BE | enemy |
+| `=`  | 09 | 9/2  | | | `t u v` | 1A 1B 1C | 4/1-3 | |
+| `:`  | -- | 12/0 | | | `w` | 1D | 15/2 | |
+| `}` `{` `[` | 04 05 19 | 4/0 (brick) | hidden? | | `x` | 18 (1 in 10) | 4/0 brick | random |
+| `c`  | 06 | 10/2 | enemy spawn list | | `z` | -- | 9/3 | enemy |
+| `d`  | 02 | 9/1  | | | `B` | -- | 18/0 | enemy |
+| `f`  | -- | 14/1 | | | `F` | 15 | 12/3 | |
+| `i`  | 13 | none | | | `P` `O` | -- | 15/0, 15/1 | enemy |
+| `k`  | 01 | 9/0  | | | `R` | 08 | 11/1 | |
+| `T`  | 14 | 14/0 | | | `X` | -- | random frame of 13 | decoration |
+| `Y`  | -- | 1/0  | **player start** | | `Z` | FF | none | |
+| `1 2 3` | 0C 0E 10 | 11/2 | | | `4 5 6` | 0D 0F 11 | none | |
+| `7 8 9 0` | 12 16 17 18 | 4/0 brick | hidden? | | | | | |
+
+`x` is the ordinary brick; one in ten gets map code 18 at random. `}`, `{`, `[`, `7`-`0` draw
+as plain brick but carry their own map codes, so they are probably secret or breakable walls.
+
 ## Hardware hooks (what the port replaces)
 
 | Hook                  | Where              | Behaviour                                                |

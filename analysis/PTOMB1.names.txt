@@ -78,7 +78,10 @@
 
 # --- In-game loop ---
 1000:4f69 GameTick                  # one frame: enemies, gravity, input, pickups
-1000:7638 StartLevel_guess          # called with level number from PlayGame
+1000:7638 StartLevel                # (level) clears state, DrawLevelRow x12 from string consts
+1000:0a58 DrawLevelRow              # (row, s: string[20]) char -> PutPic + tile map [7857]
+1854:64fb SpawnEnemy_guess          # called from DrawLevelRow for enemy tile chars
+1854:59be DrawSpecialTile_guess     # draws the 's'/'S' tiles, takes the level number
 1000:1fa0 MoveEnemies_guess         # runs when timer counter [7f6c] > 0
 1000:4dd4 PlayerJump_guess          # Space / joystick button 1
 1000:4df0 PlayerFire_guess          # joystick button 2 / fire keys, needs [75e2] > 0
