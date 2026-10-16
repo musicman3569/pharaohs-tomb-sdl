@@ -4,6 +4,13 @@ Handoff for a new session. Read this, then `README.md` (build/run/keys) and `doc
 (the reverse-engineering reference: every address, table and mechanic decoded so far). Last
 commit when written: `c9e614c` (title screen, menus, high scores). The working tree was clean.
 
+## Releases
+
+- **v1.0.0** (2026-10-16, tag on `ceace23`): GitHub release with `ptomb-v1.0.0-win64.zip`
+  (stripped `ptomb.exe`, `SDL2.dll`, README, LICENSE, LICENSE-SDL2.txt; needs only Windows
+  system DLLs). Packaged into the ignored `dist/` folder and tested from a clean folder with
+  MSYS2 off the PATH. The repo is public-ready: MIT license, no game files in any commit.
+
 ## Objective
 
 A personal learning project: reverse engineer **Pharaoh's Tomb** (Micro F/X / Apogee, 1990,
