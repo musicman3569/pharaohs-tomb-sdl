@@ -219,6 +219,7 @@ void menu_main(bool cheat_from_command_line)
                 replay(&menu_ops[i]);
             }
         }
+        flush_keyboard(); /* 1000:5C05: drops the key that ended the title demo (or a screen) */
         bat_t b1 = {50, 1, 1}, b2 = {260, 1, 1};
         int key = '!';
         for (;;) {

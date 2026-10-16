@@ -153,6 +153,11 @@ Assumed / unverified (check in DOSBox when possible):
 3. Optional: decode the Genus effect jump table for exact transitions; joystick via SDL
    GameController; verify the assumptions above in DOSBox if it gets installed.
 
+## Enhancement Ideas
+1. Fix an inconsistent movement glitch where sometimes collision with a collectible like coins 
+   blocks movement (e.g. interrupts a jump mid-flight) and other times not.
+2. Higher frame rate and smoother movement.
+
 ## How to work here (lessons from this session)
 
 - **Don't write C containing escapes (`\x9F`, `'\0'`, `'\\'`) through Bash heredocs or inline

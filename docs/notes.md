@@ -523,6 +523,9 @@ after 300 steps.
 "VER: 3.0   MAIN MENU     VOL: " + Str(volume) centred on row 11 in colour 3, menu font, four
 label lines on rows 16-22 in colour 2 with their hot-key letters redrawn by DrawTextAt in
 colour 1, two bats (1000:552E: set 18 at y = 60, x 30..80 and 220..270, one step per Delay(1)).
+It then **flushes the keyboard** (1000:5C05), which is what drops the key that ended the title
+demo: neither the demo nor the picture transition consumes it (the Genus delay routine only
+reads keys if 20FF:1349 enabled that, and the game never calls it).
 It then loops `Random(32767)` and the bats until a key in the set at CS:5A7F
 (Enter Space + C E H I J O Q S) is pressed:
 
