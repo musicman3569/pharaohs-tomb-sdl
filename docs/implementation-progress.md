@@ -29,7 +29,9 @@ uses and stays available (F1).
   HTTP at `http://127.0.0.1:8080/` (responses `{"success", "data"}`). `tools/ghidra_dump.py`
   dumps all disassembly to `analysis/PTOMB1.disasm.txt` (grep it rather than many MCP calls);
   `tools/ghidra_rename.py analysis/PTOMB1.names.txt` re-applies all names (131 at last run).
-- Not available: DOSBox. **Nothing has been compared against the running original.**
+- DOSBox isn't set up in this environment, but **the user has played the port through and
+  compared it with the original in DOSBox (2026-10-16): identical by all accounts** (they played
+  the original a lot as a child).
 
 ## Completed work (git log is the detailed record)
 
@@ -111,7 +113,10 @@ uses and stays available (F1).
 
 ## Verified vs assumed
 
-Verified (by scripted runs, screenshots, recordings or byte comparison):
+Verified by the user: a manual playthrough of the port, and the original played again in
+DOSBox for comparison. They found no differences.
+
+Verified in this environment (by scripted runs, screenshots, recordings or byte comparison):
 - C level renders equal the Python renderer pixel for pixel (except the random `X` frames and the
   `q` second draw), for packed originals of volumes 1 and 3.
 - Player: falls, walks, jumps, picks up a gem (+100), blocked by pixels, dies on spikes (lives
@@ -133,7 +138,8 @@ Verified (by scripted runs, screenshots, recordings or byte comparison):
   it through level 20's exit in play (the call sequence there is two lines).
 - Locators (`--debug-exe`) work on all four volumes; the game unit's offsets match in all four.
 
-Assumed / unverified (check in DOSBox when possible):
+Not checked individually here (decoded from the code; the user's playthrough found no
+difference):
 - `tp_random` sequence vs System 2714:08D5; "Randomize" being 2714:095C.
 - Crt Sound ignoring hz <= 18; BIOS teletype details (no scroll emulation; the game never needs it).
 - GetDotColor returning -1 off screen (only reachable at screen edges).
@@ -141,7 +147,6 @@ Assumed / unverified (check in DOSBox when possible):
   exercised in a run); story pages 2+.
 - The effect parameter meanings (direction mask, type = grain); the 125 us step estimate;
   the 70 Hz GameTick rate; DS variable addresses being the same in every volume.
-- Volumes 2-4 gameplay (only renders and locators were checked).
 
 ## Outstanding issues and known gaps
 
@@ -157,7 +162,8 @@ Assumed / unverified (check in DOSBox when possible):
 1. ~~Save/restore~~: done (`notes.md`, "Save and restore"); restores the user's own saves.
 2. ~~Volume ending~~: done; `screenvm` runs 1854:4E01 from the EXE (`--ending` shows it).
 3. ~~Joystick~~: done, SDL game controllers (`gamepad.c`).
-4. Optional: decode the Genus effect jump table for exact transitions; verify the assumptions above in DOSBox if it gets installed.
+4. Optional: decode the Genus effect jump table for exact transitions; the text-mode exit
+   screen (1854:60C8).
 
 ## Enhancement Ideas
 1. Fix an inconsistent movement glitch where sometimes collision with a collectible like coins 

@@ -7,8 +7,8 @@ re-released as freeware in 2009) with Ghidra, then porting it to run natively on
 |:---:|:---:|
 | ![The main menu](docs/screenshots/main-menu.png) | ![Level 1, At the Pyramid](docs/screenshots/level-01-at-the-pyramid.png) |
 | The main menu | Level 1: At the Pyramid |
-| ![Level 5, The Grand Gallery](docs/screenshots/level-05-the-grand-gallery.png) | ![Level 20, The Lost Tomb, in the original palette](docs/screenshots/level-20-the-lost-tomb-original-palette.png) |
-| Level 5: The Grand Gallery | Level 20: The Lost Tomb, in the original cyan/magenta palette (F1) |
+| ![Level 5, The Grand Gallery](docs/screenshots/level-05-the-grand-gallery.png) | ![Level 9, Karnak's Tomb](docs/screenshots/level-09-karnaks-tomb.png) |
+| Level 5: The Grand Gallery | Level 9: Karnak's Tomb |
 
 ## Layout
 
@@ -27,21 +27,21 @@ The port contains no game assets. At startup it reads the sprites and level layo
 your own `PTOMBn.EXE`, packed or unpacked, and reimplements the game logic in C on top of a
 Graph3-style 320x200 CGA framebuffer.
 
-What works so far: levels are drawn exactly as the game's StartLevel does, and **the player is
-playable**. You can walk, jump, fall, throw spears, and pick up or trigger every tile type
-(keys, locks, exit doors, treasure, hidden bricks, switches, spikes, the exit), with lives,
-score and level changes, and **all ten enemy types move and fight**: platforms, walkers you
-can spear, pushable blocks, vertical hazards, elevators, ceiling bats, dart traps, plus the
-freeze pickup. **All the original PC-speaker sound effects** play (E toggles them, as in the
-game). The **status bar, prompts, level titles and game-over screen** are drawn on screen as
-in the original, using the game's own fonts from the EXE plus the port's own 8x8 font for
-plain ASCII (standing in for the IBM BIOS font, which can't be shipped). It **starts like the
-original**: the title picture and walking demo, then the main menu with instructions, story,
-ordering info, keyboard setup, joystick screen and high scores (read from and saved to the
-game's own `PTOMBn.HS`, so existing scores carry over). Saving and restoring games (S / R)
-works with the original's `.SAV` files. The end-of-volume pages run after level 20. **Game
-controllers** work (see below). Not yet: the exact Genus picture-transition effects
-(approximated as wipes), and nothing has been compared side by side with the original running.
+**The whole game is there**, all four volumes: every level, tile, enemy and sound effect,
+the title screen and menus, high scores, saved games, the end-of-volume story and the cheats,
+compatible with the original's `.HS` and `.SAV` files. The only differences:
+
+- **Picture transitions** on the title and menu screens are simple wipes, not the original's
+  Genus PCX effects.
+- **Punctuation and lowercase text** use the port's own 8x8 font, standing in for the IBM BIOS
+  font, which can't be shipped. Everything else is drawn in the game's own fonts.
+- **Quitting to DOS** doesn't show the original's final text-mode screen; the window just
+  closes.
+- **Joystick:** modern controllers stand in for it and it starts switched on (see below), and
+  its fire button can no longer throw spears you don't have.
+
+Port extras: a choice of palettes (green/red/brown by default, or the original's
+cyan/magenta/white), 4:3 aspect correction, screenshots and level skipping (see the keys below).
 
 The port reads `PTOMBn.MNU`, `PTOMBn.HS`, `PTOMBn.SAV` and `PTOMB.CFG` from the folder the EXE
 is in, and **writes** `PTOMBn.HS` (a new high score), `PTOMB.CFG` (Config Keyboard) and
