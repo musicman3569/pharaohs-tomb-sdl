@@ -31,9 +31,8 @@ in the original, using the game's own fonts from the EXE plus the port's own 8x8
 plain ASCII (standing in for the IBM BIOS font, which can't be shipped). It **starts like the
 original**: the title picture and walking demo, then the main menu with instructions, story,
 ordering info, keyboard setup, joystick screen and high scores (read from and saved to the
-game's own `PTOMBn.HS`, so existing scores carry over). Saving and restoring games (S / R) works with the original's `.SAV` files. The end-of-volume pages run after level 20. Not yet: the joystick
-itself and the exact Genus picture-transition effects
-(approximated as wipes).
+game's own `PTOMBn.HS`, so existing scores carry over). Saving and restoring games (S / R) works with the original's `.SAV` files. The end-of-volume pages run after level 20. **Game controllers**
+work (see below). Not yet: the exact Genus picture-transition effects (approximated as wipes).
 
 The port reads `PTOMBn.MNU`, `PTOMBn.HS`, `PTOMBn.SAV` and `PTOMB.CFG` from the folder the EXE is in, and
 **writes** `PTOMBn.HS` (a new high score), `PTOMB.CFG` (Config Keyboard) and `PTOMBn.SAV`
@@ -76,6 +75,24 @@ Game keys (the original's):
 | Q or Esc, then Y | quit to the main menu |
 | Scroll Lock on + `+` | cheat: skip to the next level |
 
+Game controllers stand in for the original's PC joystick. Most current pads (Xbox,
+PlayStation, Switch Pro, 8BitDo and others) are recognised automatically and can be plugged in
+at any time; for anything else, put a [`gamecontrollerdb.txt`](https://github.com/mdqinc/SDL_GameControllerDB)
+next to `ptomb.exe`, and an unrecognised joystick still works through its first two axes and
+buttons. Unlike the original, the joystick starts switched on; J in the main menu turns it
+off or recalibrates it, as in the game.
+
+| Control | In game | Menus and "press any key" | QUIT (Y/N)? |
+|---------|---------|---------------------------|-------------|
+| Left stick / d-pad | walk | | |
+| A | jump | Enter | Y |
+| B or X | throw a spear | B: Esc | B: N |
+| Start | pause | Enter | Y |
+| Back / View | quit prompt | | N |
+
+As in the original, the joystick's fire button doesn't check your spear count, so it keeps
+throwing at zero and the count goes negative.
+
 Port keys:
 
 | Key | Action |
@@ -92,7 +109,9 @@ invincible, unlimited spears), `--screenshot out.png` (render one level to a fil
 `--sound-test` (play every sound effect once, named in the title bar), `--ending` (show this
 volume's ending pages), `--debug-exe` (print
 what the port found in the EXE), and two testing aids: `--script "..."` (scripted input, e.g.
-`--script "wait 70; down right; wait 18; up right; shot a.png; quit"`, times in 18.2 Hz ticks)
+`--script "wait 70; down right; wait 18; up right; shot a.png; quit"`, times in 18.2 Hz ticks;
+`pad_a`, `pad_b`, `pad_x`, `pad_start`, `pad_back` and `pad_left` / `right` / `up` / `down`
+drive a virtual controller)
 and `--record-audio out.wav` (capture everything the speaker plays).
 
 ## Reverse engineering workflow

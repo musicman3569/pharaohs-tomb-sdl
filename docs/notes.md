@@ -490,7 +490,7 @@ vertical hazards, elevators and bats moving (levels 2, 3, 5, 9). On level 16, a 
 right-hand walker (+250) and the left one kills the player. Freeze and the dart traps are ported
 but haven't been exercised in a scripted run yet.
 
-Not done yet: the joystick, the text-mode exit screen (1854:60C8), and the Genus transition effects (approximated).
+Not done yet: the text-mode exit screen (1854:60C8), and the Genus transition effects (approximated).
 The glint off-by-one (entry 0 at (0, 0)) is kept on purpose.
 
 ## Title screen, menus and high scores
@@ -629,3 +629,27 @@ does, so its last page needs two key presses. Kept.
 
 All of it fits the instruction forms `screenvm` already knew, so the port runs the routine
 straight from the EXE (`menu_volume_ending`) and `--ending` shows it for testing.
+
+## Joystick
+
+The joystick unit (20E3, game port 201h) has Joy_Detect (20E3:0000), Joy_Button1 / Joy_Button2
+(0040 / 0068) and Joy_ReadAxis(n) (00E4, 0 = X, 1 = Y), which returns a count like any PC
+analog joystick.
+
+- **Startup** (1000:84A8): `[7995]` enabled = 0, `[7996]` detected = Joy_Detect; if detected,
+  the centre is read into `[75B8]` (X) / `[75BA]` (Y). So the joystick starts **off**.
+- **JoystickMenu (1000:57C4)**: key '1' toggles `[7995]` and says "JOYSTICK IS NOW TURNED
+  ON/OFF."; any other key calibrates: if detected, read both axes into `[75B8]` / `[75BA]` until
+  either button is down, then "... CALIBRATED ...".
+- **PlayerMoveHorizontal (1000:4BD5)**, when neither arrow is held and the joystick is detected
+  and on: `X < centre - 50` walks left, `X > centre + 50` right (PlayerWalk +-2, plus PushPlayer
+  on the windy levels), before the Shift / Ctrl / Alt layouts are checked. Y is never used.
+- **GameTick (1000:5141)**: button 1 jumps if not in the air, button 2 throws if no spear is
+  flying. **It doesn't check the spear count** (the keyboard path at 1000:52F5 does), so
+  the count can go negative and the joystick never runs out.
+- **ShowLevelTitle (1854:0ED9)**: button 1 ends the wait, like a key.
+
+The port (`gamepad.c`) emulates all of it with SDL game controllers: axes as 0..200 with the
+centre at 100, the d-pad as full travel, A = button 1, B or X = button 2. Port changes: the
+joystick starts on, detection follows hotplugging, and some buttons also type keys so the menus
+and prompts work from the pad (see README).

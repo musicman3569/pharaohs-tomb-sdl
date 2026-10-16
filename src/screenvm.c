@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "gamepad.h"
 #include "graph3.h"
 #include "platform.h"
 #include "text.h"
@@ -10,6 +11,7 @@
 typedef struct {
     const gamedata_t *g;
     svm_vars_t *vars;
+    uint8_t joy_detected;   /* [7996], read from joy_detect() */
     size_t pc;       /* image offset */
     unsigned cs;     /* paragraph of the routine's code segment */
     uint16_t ax, di, bp, sp;
@@ -56,9 +58,18 @@ static int fail(vm_t *v, const char *what)
 static uint8_t *ds_byte(vm_t *v, unsigned addr)
 {
     switch (addr) {
-    case 0x7995: return &v->vars->joystick_enabled;
-    case 0x7996: return &v->vars->joystick_detected;
+    case 0x7995: return &joy_vars.enabled;
+    case 0x7996: v->joy_detected = joy_detect(); return &v->joy_detected;
     case 0x8101: return &v->vars->key_layout;
+    default: return NULL;
+    }
+}
+
+static int *ds_word(unsigned addr)
+{
+    switch (addr) {
+    case 0x75B8: return &joy_vars.center_x;
+    case 0x75BA: return &joy_vars.center_y;
     default: return NULL;
     }
 }
@@ -161,13 +172,18 @@ static int call(vm_t *v, size_t target)
         v->zf = !(set + val / 8 < g->image_len && (g->image[set + val / 8] >> (val % 8)) & 1);
         return 0;
     }
-    if (IS(SEG_JOY, 0x0000) || IS(SEG_JOY, 0x0040) || IS(SEG_JOY, 0x0068)) { /* no joystick */
-        v->ax &= 0xFF00;
+    if (IS(SEG_JOY, 0x0000)) {             /* Joy_Detect */
+        v->ax = (uint16_t)((v->ax & 0xFF00) | joy_detect());
         return 0;
     }
-    if (IS(SEG_JOY, 0x00E4)) {             /* ReadAxis(n) */
-        pop(v);
-        v->ax = 0;
+    if (IS(SEG_JOY, 0x0040) || IS(SEG_JOY, 0x0068)) { /* Joy_Button1 / Joy_Button2 */
+        plat_poll(); /* the calibration loop polls the buttons with nothing else in it */
+        const bool down = joy_button(IS(SEG_JOY, 0x0040) ? 1 : 2) || plat_quitting();
+        v->ax = (uint16_t)((v->ax & 0xFF00) | down);
+        return 0;
+    }
+    if (IS(SEG_JOY, 0x00E4)) {             /* Joy_ReadAxis(n) */
+        v->ax = (uint16_t)joy_read_axis(pop(v));
         return 0;
     }
 #undef IS
@@ -284,6 +300,17 @@ int svm_run(const gamedata_t *g, size_t entry, unsigned cs, const uint16_t *args
                 continue;
             }
             break;
+        case 0xA3: case 0xA1: {
+            int *m = ds_word(rd16(c + 1));
+            if (!m)
+                return fail(v, "access to an unknown variable");
+            if (c[0] == 0xA3)
+                *m = (int16_t)v->ax;
+            else
+                v->ax = (uint16_t)*m;
+            v->pc += 3;
+            continue;
+        }
         case 0xA2: case 0xA0: {
             uint8_t *m = ds_byte(v, rd16(c + 1));
             if (!m)
@@ -295,6 +322,7 @@ int svm_run(const gamedata_t *g, size_t entry, unsigned cs, const uint16_t *args
             v->pc += 3;
             continue;
         }
+        case 0x08: /* OR AL,AL, the other encoding */
         case 0x0A:
             if (c[1] == 0xC0) { v->zf = (v->ax & 0xFF) == 0; v->pc += 2; continue; }
             break;

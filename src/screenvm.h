@@ -14,10 +14,9 @@
 
 #include "gamedata.h"
 
-/* Variables in the game's data segment that these screens read or write. */
+/* Variables in the game's data segment that these screens read or write. The joystick ones
+ * ([7995] [7996] [75B8] [75BA]) are joy_vars and joy_detect() in gamepad.h. */
 typedef struct {
-    uint8_t joystick_enabled;  /* [7995] */
-    uint8_t joystick_detected; /* [7996] */
     uint8_t key_layout;        /* [8101] PTOMB.CFG byte */
     int config_changed;        /* set when the screen called SaveConfig (1854:0FB7) */
 } svm_vars_t;

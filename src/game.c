@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "gamepad.h"
 #include "graph3.h"
 #include "platform.h"
 #include "sound.h"
@@ -233,7 +234,11 @@ static void player_move_horizontal(void)
         push_player(-2);
 
     if (!isr_keys.left && !isr_keys.right) {
-        /* (joystick not supported yet) */
+        if (joy_detect() && joy_vars.enabled) { /* more than 50 off the calibrated centre */
+            const int x = joy_read_axis(0);
+            move_if(x < joy_vars.center_x - 50, -2);
+            move_if(x > joy_vars.center_x + 50, 2);
+        }
         if (G.key_layout == 0x1B || G.key_layout == '1') {
             move_if(sh.lshift, -2);
             move_if(sh.rshift, 2);
@@ -395,6 +400,7 @@ static void kill_player(void)
     G.loop_r = 12; /* end any tile-map loop in progress */
     G.loop_c = 20;
     if (G.lives < 0) {
+        pad_set_mode(PAD_MENU); /* the name entry and the screens after it (game_play resets it) */
         menu_game_over(G.score); /* GameOver (1000:3336): high score entry */
         game_over_screen();
     } else {
@@ -656,6 +662,7 @@ static void touch_tile(int x, int y)
         if (G.level > G.data->num_levels) {
             /* VolumeEnding (1854:4E01), then GameOver (1000:3336): the high-score entry, which
              * also sets the quit and game-over flags. No "G A M E  O V E R" frame here. */
+            pad_set_mode(PAD_MENU); /* game_play sets it back when it returns */
             menu_volume_ending(G.data->volume);
             menu_game_over(G.score);
             G.quit = true;
@@ -963,13 +970,21 @@ static bool is_fire_key(int c)
     return c && strchr(",./<>?BCFMNVXZbcfmnvxz", c) != NULL;
 }
 
+/* Wait for a key, letting the controller's A / Start answer (gamepad.h). */
+static void wait_key_or_pad(void)
+{
+    const pad_mode_t old = pad_set_mode(PAD_MENU);
+    while (!plat_key_pressed() && !plat_quitting())
+        plat_poll();
+    pad_set_mode(old);
+}
+
 /* A message on the status line until a key is pressed (the key is left for GameTick). */
 static void wait_any_key(const char *msg)
 {
     text_clear_status_line();
     text_draw_centered(1, 25, msg);
-    while (!plat_key_pressed() && !plat_quitting())
-        plat_poll();
+    wait_key_or_pad();
     text_clear_status_line();
     draw_status_bar();
 }
@@ -1060,8 +1075,7 @@ static void restore_game(void)
     if (!ok) {
         text_clear_status_line();
         text_draw_centered(1, 25, "SAVE FILE NOT ON DISK. PRESS ANY KEY.");
-        while (!plat_key_pressed() && !plat_quitting())
-            plat_poll();
+        wait_key_or_pad();
         /* The key is left for GameTick, and the status bar isn't redrawn: it stays blank until
          * something else draws it. Both as in the original. */
         text_clear_status_line();
@@ -1129,6 +1143,15 @@ void game_tick(void)
 
     player_move_horizontal();
 
+    if (joy_vars.enabled && joy_detect()) {
+        if (joy_button(1) && !G.jumping)
+            player_jump();
+        /* No spears check here, unlike the keyboard's: with the joystick you can keep throwing
+         * at 0 spears and the count goes negative. An original quirk, kept. */
+        if (joy_button(2) && !G.shot)
+            player_fire();
+    }
+
     if (plat_key_pressed()) {
         G.last_key = plat_read_key();
         if (G.last_key == 0) {
@@ -1144,7 +1167,9 @@ void game_tick(void)
         if (upcase(G.last_key) == 'Q' || G.last_key == 27) {
             text_clear_status_line();
             text_draw_centered(1, 25, "QUIT (Y/N)?");
+            const pad_mode_t old = pad_set_mode(PAD_YESNO);
             G.last_key = plat_read_key();
+            pad_set_mode(old);
             if (upcase(G.last_key) == 'Y')
                 G.quit = true;
             text_clear_status_line();
@@ -1210,6 +1235,7 @@ void game_play(int level, bool cheat)
     /* PlayGame (1000:53B7) */
     G.cheat = cheat;
     G.quit = G.game_over = false;
+    const pad_mode_t old_mode = pad_set_mode(PAD_GAME);
     game_start_level(level);
     draw_status_bar();
     flush_keyboard();
@@ -1227,6 +1253,7 @@ void game_play(int level, bool cheat)
         plat_poll();
         plat_pace(GAME_TICK_HZ);
     }
+    pad_set_mode(old_mode);
 }
 
 void game_title_demo(const gamedata_t *data, int key_layout)
@@ -1273,8 +1300,11 @@ static void show_level_title(int level)
     if (level >= 1 && level <= MAX_LEVELS)
         text_draw_centered(2, 12, G.data->level_names[level - 1]);
     flush_keyboard();
-    for (int n = level; n < 0x30 && !plat_key_pressed() && !plat_quitting(); n++)
+    for (int n = level; n < 0x30 && !plat_key_pressed() && !plat_quitting(); n++) {
         plat_delay(1);
+        if (joy_vars.enabled && joy_detect() && joy_button(1)) /* button 1 skips it too */
+            break;
+    }
     flush_keyboard();
     g3_graph_color_mode();
 }

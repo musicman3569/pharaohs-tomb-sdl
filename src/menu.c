@@ -15,7 +15,6 @@
 static const gamedata_t *data;
 static pcx_image_t title_pic;
 static int cfg_layout;            /* [8101] from PTOMB.CFG, 0 if none */
-static uint8_t joystick_enabled;  /* [7995] */
 static int marker_row = -1;       /* [75CC] row offset of a new high-score entry */
 
 /* Text calls found in the main-program routines (see gamedata_text_ops). */
@@ -117,7 +116,7 @@ static void replay(const text_op_t *op)
 /* Run one of the game's text screens through the interpreter. */
 static void run_screen(size_t entry, unsigned cs, const uint16_t *args, int nargs)
 {
-    svm_vars_t vars = {joystick_enabled, 0, (uint8_t)(cfg_layout ? cfg_layout : '3'), 0};
+    svm_vars_t vars = {(uint8_t)(cfg_layout ? cfg_layout : '3'), 0};
     char err[200];
     if (svm_run(data, entry, cs, args, nargs, &vars, err, sizeof err) != 0) {
         fprintf(stderr, "ptomb: %s\n", err);
@@ -128,7 +127,6 @@ static void run_screen(size_t entry, unsigned cs, const uint16_t *args, int narg
         while (!plat_key_pressed() && !plat_quitting())
             plat_poll();
     }
-    joystick_enabled = vars.joystick_enabled;
     if (vars.config_changed) {
         cfg_layout = vars.key_layout;
         save_config(cfg_layout);

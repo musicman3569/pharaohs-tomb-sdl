@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "cga.h"
+#include "gamepad.h"
 #include "platform_sdl.h"
 #include "timer.h"
 
@@ -222,6 +223,11 @@ static void push_key(int c)
     }
 }
 
+void plat_push_key(int c)
+{
+    push_key(c);
+}
+
 static void push_extended(int scancode)
 {
     push_key(0);
@@ -304,7 +310,8 @@ shift_keys_t plat_shift_keys(void)
 
 /* Commands separated by ';', timed in timer ticks (18.2 per second):
  *   wait N | down KEY | up KEY | tap KEY | shot FILE.png | quit
- * KEY is left, right, up, down, space, esc, enter, or a single character. */
+ * KEY is left, right, up, down, space, esc, enter, or a single character, or a control on a
+ * virtual game controller: pad_a, pad_b, pad_x, pad_start, pad_back, pad_left, ... (gamepad.h). */
 static char script_buf[4096];
 static char *script_pos;
 static uint32_t script_wait_until;
@@ -325,6 +332,8 @@ static SDL_Keycode key_by_name(const char *name)
 
 static void script_key(const char *name, bool down)
 {
+    if (pad_script(name, down))
+        return;
     SDL_KeyboardEvent k;
     SDL_zero(k);
     k.keysym.sym = key_by_name(name);
@@ -389,6 +398,8 @@ void plat_poll(void)
             key_up(&ev.key);
         else if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
             isr_keys.left = isr_keys.right = false; /* don't leave a key "held" */
+        else
+            pad_event(&ev);
     }
 
     /* The timer interrupt, at 18.2065 Hz of real time. */
@@ -502,6 +513,8 @@ int plat_init(int pal, int bri, char *err, size_t errlen)
         audio_rate = have.freq;
         SDL_PauseAudioDevice(audio, 0);
     } /* no audio device: carry on silently */
+
+    pad_init();
 
     perf_freq = SDL_GetPerformanceFrequency();
     last_counter = last_present = SDL_GetPerformanceCounter();

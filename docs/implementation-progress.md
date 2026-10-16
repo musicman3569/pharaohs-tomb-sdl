@@ -123,6 +123,10 @@ Verified (by scripted runs, screenshots, recordings or byte comparison):
 - Save/restore on temp copies: R loads the user's `PTOMB1.SAV` (level 20, 951,000) and
   `PTOMB2.SAV`; S then rewrites them byte-identically; a missing file shows the original's
   message. Not exercised: dying after a restore (the stale level-start counters quirk).
+- Game controllers: scripted runs with the virtual pad (`pad_*`): the J screen toggles and
+  calibrates (it used to stop on an unsupported `08 C0`), d-pad walking, A jump, X spear, Start
+  pause, Back + B at the quit prompt, A / Start through the title and menu. A real Xbox One
+  controller on the user's machine was detected. Not tried: playing with a real pad by hand.
 - Volume ending: `--ending` screenshots of every page on all four volumes. Not exercised: reaching
   it through level 20's exit in play (the call sequence there is two lines).
 - Locators (`--debug-exe`) work on all four volumes; the game unit's offsets match in all four.
@@ -132,14 +136,14 @@ Assumed / unverified (check in DOSBox when possible):
 - Crt Sound ignoring hz <= 18; BIOS teletype details (no scroll emulation; the game never needs it).
 - GetDotColor returning -1 off screen (only reachable at screen edges).
 - The elevator's vertical trail and other enemy visuals; freeze and dart traps (ported, never
-  exercised in a run); story pages 2+ and the joystick screen (not screenshotted).
+  exercised in a run); story pages 2+.
 - The effect parameter meanings (direction mask, type = grain); the 125 us step estimate;
   the 70 Hz GameTick rate; DS variable addresses being the same in every volume.
 - Volumes 2-4 gameplay (only renders and locators were checked).
 
 ## Outstanding issues and known gaps
 
-- Not ported: the joystick; the text-mode exit screen (1854:60C8); StartLevel's 2714:095C
+- Not ported: the text-mode exit screen (1854:60C8); StartLevel's 2714:095C
   Randomize (approximated by reseeding).
 - The port **writes into the EXE's folder** (`PTOMBn.HS` on a new high score, `PTOMB.cfg` from
   Config Keyboard, `PTOMBn.SAV` on S), as the original does. Test against a copy (see below).
@@ -150,13 +154,14 @@ Assumed / unverified (check in DOSBox when possible):
 
 1. ~~Save/restore~~: done (`notes.md`, "Save and restore"); restores the user's own saves.
 2. ~~Volume ending~~: done; `screenvm` runs 1854:4E01 from the EXE (`--ending` shows it).
-3. Optional: decode the Genus effect jump table for exact transitions; joystick via SDL
-   GameController; verify the assumptions above in DOSBox if it gets installed.
+3. ~~Joystick~~: done, SDL game controllers (`gamepad.c`).
+4. Optional: decode the Genus effect jump table for exact transitions; verify the assumptions above in DOSBox if it gets installed.
 
 ## Enhancement Ideas
 1. Fix an inconsistent movement glitch where sometimes collision with a collectible like coins 
    blocks movement (e.g. interrupts a jump mid-flight) and other times not.
 2. Higher frame rate and smoother movement.
+3. Fullscreen mode
 
 ## How to work here (lessons from this session)
 
