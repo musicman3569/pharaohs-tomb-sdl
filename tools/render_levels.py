@@ -135,12 +135,62 @@ def find_tiles(image, draw_row):
             if m:
                 random_base = struct.unpack("<H", m.group(1))[0]
         maps = [m.group(2)[0] for m in MAP_STORE.finditer(body) if m.group(1) == map_disp]
+        far = [m for m in FAR_CALL.finditer(body)
+               if m.group(0) not in (putpic, strcmp) and m.group(2) in real_segs]
         calls = sorted({f"{struct.unpack('<H', m.group(2))[0]:04X}:{struct.unpack('<H', m.group(1))[0]:04X}"
-                        for m in FAR_CALL.finditer(body)
-                        if m.group(0) not in (putpic, strcmp) and m.group(2) in real_segs})
-        tiles[ch] = {"bufs": bufs, "random_base": random_base,
-                     "map": maps[-1] if maps else None, "calls": calls}
+                        for m in far})
+        targets = [struct.unpack("<H", m.group(2))[0] * 16 + struct.unpack("<H", m.group(1))[0] for m in far]
+        enemy = None
+        for m in far:
+            e = parse_spawn_args(body, m.start())
+            if e:
+                enemy = e
+        tiles[ch] = {"bufs": bufs, "random_base": random_base, "map": maps[-1] if maps else None,
+                     "calls": calls, "targets": targets, "enemy": enemy}
     return tiles
+
+
+def parse_spawn_args(body, p):
+    """Read SpawnEnemy(type, x, y, speed, dx, dy, flag: byte) arguments backwards from a call.
+
+    The call ends with:  [mov ax,speed|xor ax,ax] push ax  x3 (speed, dx, dy)  mov al,flag push ax
+    and starts with:     mov ax,TYPE push ax  mov ax,[col] ...   (x and y are computed)
+    """
+    q = p
+    if q < 3 or body[q - 3] != 0xB0 or body[q - 1] != 0x50:
+        return None
+    q -= 3
+    vals = []
+    for _ in range(3):
+        if q >= 4 and body[q - 4] == 0xB8 and body[q - 1] == 0x50:
+            vals.append(s16(struct.unpack("<H", body[q - 3:q - 1])[0]))
+            q -= 4
+        elif body[q - 3:q] == b"\x31\xC0\x50":
+            vals.append(0)
+            q -= 3
+        else:
+            return None
+    dy, dx, speed = vals
+    i = body.rfind(b"\x50\xA1", 0, q)
+    if i < 3 or body[i - 3] != 0xB8:
+        return None
+    return {"type": struct.unpack("<H", body[i - 2:i])[0], "speed": speed, "dx": dx, "dy": dy}
+
+
+# --- Per-level monster sprite (DrawSpecialTile) ---------------------------------------------
+
+# cmp ax,LEVEL / jnz .. / mov ax,[bp+0Ah] / mov dx,9Ch / mul dx / mov di,ax / add di,BASE
+SPECIAL_CASE = re.compile(rb"\x3D(..)\x75.\x8B\x46\x0A\xBA\x9C\x00\xF7\xE2\x8B\xF8\x81\xC7(..)", re.S)
+
+
+def find_special(image, tiles):
+    """Return (function offset, {level: base}) for the routine that draws 's'/'S' tiles."""
+    for t in {x for v in tiles.values() for x in v["targets"]}:
+        cases = {struct.unpack("<H", m.group(1))[0]: struct.unpack("<H", m.group(2))[0]
+                 for m in SPECIAL_CASE.finditer(image[t:t + 0x400])}
+        if len(cases) >= 10:
+            return t, cases
+    return None, {}
 
 
 # --- Sprite buffers -------------------------------------------------------------------------
@@ -167,7 +217,8 @@ def describe(off):
 
 # --- Rendering ------------------------------------------------------------------------------
 
-def render(level, tiles, ds_data, copies, level_no):
+def render(level, tiles, ds_data, copies, level_no, special):
+    special_fn, special_bases = special
     fb = [bytearray(320) for _ in range(200)]
     unknown = set()
 
@@ -196,6 +247,10 @@ def render(level, tiles, ds_data, copies, level_no):
                     # The game picks one of 4 frames at random; use a fixed choice per cell.
                     pick = (r * 7 + c * 3 + level_no) % 4
                     off = buffer_to_ds((t["random_base"] + (pick + 1) * 0x9C) & 0xFFFF, copies)
+                    drawn |= off is not None and blit(off, x, top)
+                if special_fn in t["targets"] and level_no in special_bases:
+                    # This level's monster, first animation frame (DrawSpecialTile frame 1).
+                    off = buffer_to_ds((special_bases[level_no] + 0x9C) & 0xFFFF, copies)
                     drawn |= off is not None and blit(off, x, top)
             if not drawn and (not t or t["calls"]):
                 # Drawn by other code (or unknown): outline the cell so it is visible.
@@ -227,8 +282,15 @@ def main():
     draw_row, levels = find_levels(image, entry)
     tiles = find_tiles(image, draw_row)
     copies = find_sprite_copies(image)
+    special = find_special(image, tiles)
 
     if args.table:
+        if special[0] is not None:
+            per_level = []
+            for lv, base in sorted(special[1].items()):
+                o = buffer_to_ds((base + 0x9C) & 0xFFFF, copies)
+                per_level.append(f"{lv}:{o // SET_BYTES if o is not None else '?'}")
+            print(f"Level monster (s/S) sprite set by level: {' '.join(per_level)}")
         print(f"DrawRow at 0000:{draw_row:04X}, {len(tiles)} tile characters, "
               f"{len(copies)} sprite sets, {len(levels)} levels")
         for ch, t in tiles.items():
@@ -237,8 +299,13 @@ def main():
             if t["random_base"] is not None:
                 o = buffer_to_ds((t["random_base"] + 0x9C) & 0xFFFF, copies)
                 sprites.append(f"random frame of set {o // SET_BYTES}" if o is not None else "random")
+            if special[0] in t["targets"]:
+                sprites.append("level monster")
             m = "--" if t["map"] is None else f"{t['map']:02X}"
-            print(f"  {ch!r:5} map {m}  {'; '.join(sprites) or '(no sprite)'}"
+            e = t["enemy"]
+            et = (f"  enemy type {e['type']} speed {e['speed']} dx {e['dx']:+d} dy {e['dy']:+d}"
+                  if e else "")
+            print(f"  {ch!r:5} map {m}  {'; '.join(sprites) or '(no sprite)'}{et}"
                   f"{'  calls ' + ', '.join(t['calls']) if t['calls'] else ''}")
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -246,7 +313,7 @@ def main():
     sheet = [bytearray(sheet_cols * 322) for _ in range(((len(levels) + sheet_cols - 1) // sheet_cols) * 202)]
     all_unknown = set()
     for i, level in enumerate(levels, start=1):
-        fb, unknown = render(level, tiles, ds_data, copies, i)
+        fb, unknown = render(level, tiles, ds_data, copies, i, special)
         all_unknown |= unknown
         write_png(os.path.join(args.outdir, f"level{i:02d}.png"), scale(fb, args.zoom),
                   320 * args.zoom, 200 * args.zoom, palette)

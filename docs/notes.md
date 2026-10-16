@@ -99,7 +99,7 @@ Sprite = set/frame from the sprite table above. Map = tile code written to the m
 | `$ % ^ &` | -- | 6/0-3 | slopes | | `p` | 03 | 10/0 | |
 | `* ( ) _` | -- | 7/0-3 | | | `q` | -- | 12/2 (x2) | enemy |
 | `+` `\`   | -- | 8/0 | enemy (dir +1 / -1) | | `r` | 07 | 11/0 | |
-| `\| ` `` ` `` `-` | 09 | 8/1-3 | | | `s` `S` | -- | drawn by 59BE | enemy |
+| `\| ` `` ` `` `-` | 09 | 8/1-3 | | | `s` `S` | -- | level monster | enemy type 2 |
 | `=`  | 09 | 9/2  | | | `t u v` | 1A 1B 1C | 4/1-3 | |
 | `:`  | -- | 12/0 | | | `w` | 1D | 15/2 | |
 | `}` `{` `[` | 04 05 19 | 4/0 (brick) | hidden? | | `x` | 18 (1 in 10) | 4/0 brick | random |
@@ -115,6 +115,52 @@ Sprite = set/frame from the sprite table above. Map = tile code written to the m
 
 `x` is the ordinary brick; one in ten gets map code 18 at random. `}`, `{`, `[`, `7`-`0` draw
 as plain brick but carry their own map codes, so they are probably secret or breakable walls.
+
+## Enemies
+
+`SpawnEnemy(type, x, y, speed, dx, dy, flag: byte)` (1854:64FB) fills the next of **10 slots**,
+0x12 bytes each, at DS:`7EA4 + i*0x12` (i = 1..10). StartLevel marks all slots free.
+`MoveEnemies` (1000:1FA0) runs from GameTick whenever timer counter `[7F6C] > 0` and has one
+branch per type. Movement per step is `speed * dx` / `speed * dy` pixels.
+
+| Offset | Field                                   |
+|--------|-----------------------------------------|
+| +00    | animation frame (1..4), 1 on spawn      |
+| +02    | x                                       |
+| +04    | y (bottom row, like PutPic)             |
+| +06    | speed                                   |
+| +08    | dx                                      |
+| +0A    | dy                                      |
+| +0C    | type                                    |
+| +0E    | 0 on spawn (unknown)                    |
+| +11    | free flag (1 = slot unused)             |
+
+| Type | Chars (speed) | Sprite | Behaviour | Kills on touch | Shootable |
+|------|---------------|--------|-----------|----------------|-----------|
+| 1 | `+` (dx +1), `\` (dx -1), speed 2 | 8/0 | **Horizontal moving platform.** Reverses when the pixel ahead isn't black or the player blocks it; carries a player standing on it. | no | no |
+| 2 | `s` (1), `S` (2) | **per-level monster** | **Walker.** Patrols left/right, turns when `EnemyBlocked`, animates 4 frames. Shot: sparkle death animation (set 20) + score. | yes | yes |
+| 3 | `z`, speed 2 | 9/3 | **Pushable block.** When the player stands beside it on the same row, facing it, it slides 2 px, with a random-pitch speaker click if sound is on. | no | no |
+| 4 | `l` (1), `L` (2) | 10/1 | **Vertical bouncing hazard.** Moves down/up, reverses on non-black pixels. | yes | no |
+| 5 | `m` (1), `M` (2) | 10/3 | Same as type 4 with a different sprite. | yes | no |
+| 6 | `n`, starts going up | 11/3 | **Elevator.** Vertical platform that carries the player, reverses at obstacles or y <= 36. Crushes a player beneath it while moving down. | when crushing | no |
+| 7 | `q`, starts going up | 12/2 | **Vertical hazard**, taller hit box than 4/5. Drawn twice (x and x-2). | yes | no |
+| 8 | `B` | set 18, animated | **Bird/bat walker.** Like type 2, but also turns at ledges (needs floor under it) and stays within x = 3..317. | yes | yes |
+| 9 | `P` | 15/0 | **Dart trap, fires right.** When the player is on its row it shoots a dart (a plotted dot) moving +4 px per tick of `[7F72]` until it hits a wall, the screen edge, or the player. | dart kills | no |
+| 10 | `O` | 15/1 | Dart trap, fires left (`[7F70]`, -4 px). | dart kills | no |
+
+- `[7968]` freezes all enemies. It counts up in `[75EA]` and clears after 3000 steps, so it's
+  probably a pickup.
+- `c` tiles aren't enemies. They go into a spawn-point list at `7606 + n*6`; GameTick
+  occasionally (5 in 100) plays a set-21 "glint" animation on a random one.
+
+### Per-level monster for `s`/`S` (DrawLevelMonster, 1854:59BE)
+
+The sprite is `frame*0x9C + base[level]`. The level number is `[75D0]`, 1..20 within the volume.
+Same table in all four volumes:
+
+| Level | 1  | 2  | 3  | 4  | 5  | 6  | 7  | 8  | 9  | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 |
+|-------|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|
+| Set   | 31 | 27 | 24 | 25 | 26 | 23 | 28 | 29 | 30 | 39 | 32 | 33 | 31 | 34 | 19 | 35 | 36 | 37 | 38 | 22 |
 
 ## Hardware hooks (what the port replaces)
 
