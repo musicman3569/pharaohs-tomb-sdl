@@ -184,7 +184,7 @@ branch per type. Movement per step is `speed * dx` / `speed * dy` pixels.
 | 4 | `l` (1), `L` (2) | 10/1 | **Vertical bouncing hazard.** Moves down/up, reverses on non-black pixels. | yes | no |
 | 5 | `m` (1), `M` (2) | 10/3 | Same as type 4 with a different sprite. | yes | no |
 | 6 | `n`, starts going up | 11/3 | **Elevator.** Vertical platform that carries the player, reverses at obstacles or y <= 36. Crushes a player beneath it while moving down. | when crushing | no |
-| 7 | `q`, starts going up | 12/2 | **Vertical hazard**, taller hit box than 4/5. Drawn twice (x and x-2). | yes | no |
+| 7 | `q`, starts going up | 12/2 | **Vertical hazard**, taller hit box than 4/5. Drawn twice at load: at y and 2 px higher, and spawned at y-2. | yes | no |
 | 8 | `B` | set 18, animated | **Bird/bat walker.** Like type 2, but also turns at ledges (needs floor under it) and stays within x = 3..317. | yes | yes |
 | 9 | `P` | 15/0 | **Dart trap, fires right.** When the player is on its row it shoots a dart (a plotted dot) moving +4 px per tick of `[7F72]` until it hits a wall, the screen edge, or the player. | dart kills | no |
 | 10 | `O` | 15/1 | Dart trap, fires left (`[7F70]`, -4 px). | dart kills | no |
@@ -296,3 +296,22 @@ GameTick (1000:4f69), once per frame
 | `PTOMBn.HS`   | 1310  | high scores, 5 x 262-byte records          |
 | `PTOMBn.MNU`  | 5722  | title/menu screen, PCX 320x200x4           |
 | `PTOMBn.SAV`  | 17    | saved game                                 |
+
+## The port (src/)
+
+| File | Replaces |
+|------|----------|
+| `cga.c` | CGA mode 4 video memory: packed 2 bpp, 80 bytes/row (linear, no even/odd banks); palettes; PNG screenshots |
+| `graph3.c` | Graph3 unit: GraphColorMode, PutPic (Y = bottom row, opaque, clipped), GetPic, GetDotColor (-1 off screen), Plot, Draw |
+| `timer.c` | INT 1Ch TimerISR: six counters at 18.2065 Hz, driven from SDL's performance counter |
+| `tp.c` | TP `Random` (LCG 134775813; sequence not yet checked against 2714:08D5) |
+| `lzexe.c` / `gamedata.c` | reads the user's EXE (packed or not), finds DS and the level rows by pattern |
+| `level.c` | StartLevel / DrawLevelRow / SpawnEnemy / DrawLevelMonster, with the tile table as C data |
+| `main.c` | SDL2 window, input, level viewer |
+
+Verified: `--screenshot` renders from the packed originals match `tools/render_levels.py`
+pixel for pixel, except the random `X` frames and the `q` tiles (the Python tool doesn't do the
+second, 2 px higher draw).
+
+Not done yet: the status bar (it's printed in the BIOS 8x8 font, which the port can't ship),
+StartLevel's calls 1854:114F / 10A3 before the rows, and all gameplay.
