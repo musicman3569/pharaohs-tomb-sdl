@@ -5,7 +5,9 @@
  *
  * Picture buffers use Graph3's GetPic format, which is also how the game stores its sprites:
  *   uint16 mode (2 = 320x200 4-colour), uint16 width, uint16 height,
- *   then `height` rows of 2-bit pixels, top row first, ceil(width/4) bytes per row. */
+ *   then `height` rows of 2-bit pixels, BOTTOM row first, ceil(width/4) bytes per row.
+ * (Bottom-first matches PutPic's Y being the bottom row; the score pop-up sprites read
+ * "10K 15K 20K", as the bonus code awards, only this way up.) */
 #ifndef PTOMB_GRAPH3_H
 #define PTOMB_GRAPH3_H
 

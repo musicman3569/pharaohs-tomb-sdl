@@ -31,9 +31,8 @@ void g3_put_pic(const uint8_t *pic, int x, int y)
     if (mode != 2 || w <= 0 || h <= 0)
         return;
     const int stride = (w * 2 + 7) / 8;
-    const int top = y - h + 1;
     for (int r = 0; r < h; r++) {
-        const int py = top + r;
+        const int py = y - r; /* row 0 is the bottom row */
         if (py < 0 || py >= CGA_H)
             continue;
         const uint8_t *row = pic + 6 + r * stride;
@@ -63,7 +62,7 @@ void g3_get_pic(uint8_t *pic, int x1, int y1, int x2, int y2)
         for (int i = 0; i < stride; i++)
             row[i] = 0;
         for (int c = 0; c < w; c++) {
-            const int px = x1 + c, py = y1 + r;
+            const int px = x1 + c, py = y2 - r; /* bottom row first */
             if (on_screen(px, py))
                 row[c >> 2] |= (uint8_t)(cga_get(px, py) << (6 - 2 * (c & 3)));
         }

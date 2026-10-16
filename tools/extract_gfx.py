@@ -8,7 +8,8 @@ Usage:
 
 Sprite format (Turbo Pascal Graph3 GetPic buffer):
   word mode (2 = 320x200 4-colour), word width, word height,
-  then `height` rows of 2-bit pixels, MSB first, ceil(width/4) bytes per row.
+  then `height` rows of 2-bit pixels, MSB first, ceil(width/4) bytes per row,
+  BOTTOM row first (matching PutPic, whose Y is the picture's bottom row).
 The game keeps 40 sprite sets at the start of its data segment. Each set is 4 animation
 frames, and each frame sits in a 0x9C-byte slot (room for up to 24x24).
 
@@ -98,7 +99,8 @@ def parse_frame(slot):
     mode, w, h = struct.unpack_from("<3H", slot, 0)
     if mode != 2 or not (0 < w <= 24 and 0 < h <= 24) or 6 + h * ((w * 2 + 7) // 8) > SLOT:
         return None
-    return w, h, unpack_2bpp(slot[6:], w, h)
+    # Graph3 stores the bottom row first (PutPic's Y is the bottom row), so flip to top-first.
+    return w, h, unpack_2bpp(slot[6:], w, h)[::-1]
 
 
 def extract_sprites(exe_path, outdir, palette, zoom):

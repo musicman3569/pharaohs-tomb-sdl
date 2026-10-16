@@ -20,7 +20,7 @@ enum {
     SET_BRICK = 4,      /* 810A frame 0 */
     SET_GEM = 10,       /* 9D12 frame 2 */
     SET_CRUMBLE = 16,   /* AA7A frames 0..3: brick -> nothing */
-    SET_INVISIBLE = 17, /* 921A, the shadow line only */
+    SET_INVISIBLE = 17, /* 921A, just the hat brim */
     SET_DEATH = 19,     /* B1CA */
     SET_GLINT = 21,     /* B43A */
 };

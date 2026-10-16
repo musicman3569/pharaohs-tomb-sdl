@@ -34,8 +34,11 @@ length-prefixed. Segment map:
 
 - **CGA 320x200, 4 colors**, palette 1 (cyan/magenta/white), drawn through Graph3.
 - Sprites: Graph3 `GetPic` format, header `word mode=2, word w, word h`, then 2 bpp rows
-  (MSB = leftmost pixel, 4 bytes per 16-px row). **All 160 frames are 16x16.** Each frame sits
-  in a 0x9C-byte slot (room for 24x24) padded with spaces.
+  (MSB = leftmost pixel, 4 bytes per 16-px row), **bottom row first**. That matches PutPic's
+  Y being the bottom row. (Reading them top-first, as the first versions of the tools and port
+  did, turns every sprite upside down; the giveaway is the score signs reading "12K / 50K"
+  where the code awards 15,000 / 20,000.) **All 160 frames are 16x16.** Each frame sits in a
+  0x9C-byte slot (room for 24x24) padded with spaces.
 - 40 sets x 4 slots live in DS:0000-6180 and are copied into BSS at startup by
   `InitSprites_A/B`. For enemies and effects the 4 slots are animation frames; tile sets
   (bricks, slopes, items) hold 4 unrelated tiles, and some slots are empty.
@@ -64,8 +67,11 @@ length-prefixed. Segment map:
 | 8   | 1380   | 96FA | | 18  | 2BE0   | ACEA | | 28  | 4440   | C682 | | 38  | 5CA0   | DEE2 |
 | 9   | 15F0   | 996A | | 19  | 2E50   | B1CA | | 29  | 46B0   | C8F2 | | 39  | 5F10   | E152 |
 
-Frame n of a set is at BSS + n*0x9C. Sets 0-3 are the player; 4-19 are mostly tiles, items
-and score pop-ups (10K/12K/50K); 20-39 are enemies and effects.
+Frame n of a set is at BSS + n*0x9C. Sets 0-3 are the player (an explorer in a green hat);
+4-19 are mostly tiles and items, including the score signs (10K = 12/1, 15K = 14/2,
+20K = 14/3), the "16 TONS" weight (10/3, enemy type 5), the hanging spike comb (10/1, type 4),
+17 = the invisible player (just the hat brim) and 19 = the death skull; 20-39 are enemies
+and effects.
 - **Collision reads the screen.** `GameTick` calls `Graph3_GetDotColor(x, y+2)` to decide whether the player
   falls. The port must keep a real 320x200 2 bpp framebuffer that game logic can read back.
 
@@ -140,7 +146,7 @@ flag `[7964]` is set. "Erase" means the cell is cleared to 0 and overwritten wit
 | 0C/0E/10 | `1` `2` `3` | **switch** (11/2) | erase, then every cell with code+1 (0D/0F/11) **builds a brick** (set 16 frames 3->0). Bricks are solid because collision reads pixels | 100 |
 | 0D/0F/11 | `4` `5` `6` | **invisible brick spots** | targets of switches 1/2/3 | |
 | 12 | `7` | **brick with hidden treasure** | flashes a gem, treasure +5, brick stays | 5 x 50 |
-| 13 | `i` | **hidden invisibility trap** | erase, sound; the **player turns invisible** for 300 timer ticks (~16.5 s): `[795E]`=1, timer `[75F2]`. Only the shadow line (set 17) is drawn. Purely visual: enemies and spikes still kill. Level 17 starts with the player invisible | |
+| 13 | `i` | **hidden invisibility trap** | erase, sound; the **player turns invisible** for 300 timer ticks (~16.5 s): `[795E]`=1, timer `[75F2]`. Only the hat brim (set 17) is drawn, floating where the player is. Purely visual: enemies and spikes still kill. Level 17 starts with the player invisible | |
 | 14 | `T` | **"T" collectible** (14/0) | erase, T count `[75EC]` +1; 5 of them -> 50,000 and reset | 1,000 |
 | 15 | `F` | **freeze** (12/3) | erase, `[7968]` = 1: all enemies stop for 3000 steps | 1,000 |
 | 16 | `8` | **brick with hidden treasure** | treasure +10 | 10 x 50 |
@@ -388,7 +394,10 @@ Verified: `--screenshot` renders from the packed originals match `tools/render_l
 pixel for pixel, except the random `X` frames and the `q` tiles (the Python tool doesn't do the
 second, 2 px higher draw). Scripted runs on volume 1 show falling, walking, jumping, picking up
 a gem (+100, treasure 1), being blocked by solid pixels, dying on spikes (lives 4 -> 3, treasure
-restored to its level-start value) and changing level.
+restored to its level-start value) and changing level. (Those first runs used upside-down
+sprites; after the row-order fix the renders still match each other, the pyramid slopes are
+smooth, and the level-16 spear kill still scores 250. Collision results differ, as they should
+with the corrected shapes.)
 
 ### Player mechanics (from the disassembly)
 
