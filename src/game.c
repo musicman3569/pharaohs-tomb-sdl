@@ -1146,9 +1146,9 @@ void game_tick(void)
     if (joy_vars.enabled && joy_detect()) {
         if (joy_button(1) && !G.jumping)
             player_jump();
-        /* No spears check here, unlike the keyboard's: with the joystick you can keep throwing
-         * at 0 spears and the count goes negative. An original quirk, kept. */
-        if (joy_button(2) && !G.shot)
+        /* Port fix: the original has no spears check here (only the keyboard path has one), so
+         * the joystick could keep throwing at 0 spears and take the count negative. */
+        if (joy_button(2) && !G.shot && G.spears > 0)
             player_fire();
     }
 

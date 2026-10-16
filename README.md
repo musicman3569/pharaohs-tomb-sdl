@@ -90,8 +90,8 @@ off or recalibrates it, as in the game.
 | Start | pause | Enter | Y |
 | Back / View | quit prompt | | N |
 
-As in the original, the joystick's fire button doesn't check your spear count, so it keeps
-throwing at zero and the count goes negative.
+The original's joystick fire button didn't check your spear count, so it kept throwing at
+zero and the count went negative; the port fixes that.
 
 Port keys:
 

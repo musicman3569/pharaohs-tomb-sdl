@@ -90,6 +90,8 @@ uses and stays available (F1).
   ROM, which can't be shipped.
 - **Zero-delay sound sweeps** (pickup, crumble) are queued to the audio thread at 125 us per step
   (an estimate for a 4.77 MHz 8088), because their length was CPU speed.
+- Original bug deliberately **fixed** (the user's call): the joystick's fire button throwing
+  at 0 spears (count going negative). The port checks the count, as the keyboard path does.
 - Original quirks deliberately kept: the glint `Random(n+1)` off-by-one (entry 0 at (0, 0));
   DS:7606 aliasing (the left dart's y is glint entry 0's x); the turn animation only on the first
   turns of a game; `PlayerWalk(0)` turning the player left; free enemy slots running as type 1;

@@ -651,5 +651,6 @@ analog joystick.
 
 The port (`gamepad.c`) emulates all of it with SDL game controllers: axes as 0..200 with the
 centre at 100, the d-pad as full travel, A = button 1, B or X = button 2. Port changes: the
-joystick starts on, detection follows hotplugging, and some buttons also type keys so the menus
-and prompts work from the pad (see README).
+joystick starts on, detection follows hotplugging, some buttons also type keys so the menus
+and prompts work from the pad (see README), and button 2 checks the spear count like the
+keyboard does (a deliberate fix, unlike the other quirks, which are kept).
