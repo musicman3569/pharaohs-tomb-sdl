@@ -33,6 +33,7 @@ enum {
     GAME_SHOW_STORY = 0x3A03,        /* (volume) */
     GAME_SHOW_ORDERING = 0x1E44,     /* (volume, quitting: byte) */
     GAME_CONFIG_KEYBOARD = 0x69D3,   /* () */
+    GAME_VOLUME_ENDING = 0x4E01,     /* (volume) */
 };
 
 #endif

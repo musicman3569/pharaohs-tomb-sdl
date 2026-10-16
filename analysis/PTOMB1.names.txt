@@ -129,6 +129,7 @@
 1000:4cf5 MoveShot                  # spear line, 4 px per [7F6C] tick
 1000:3336 GameOver                  # game over screen, high score entry
 # 1854:0000 Delay(ticks), busy-wait on [7F74] (no Ghidra function there yet; create one to name it)
+1854:4e01 VolumeEnding              # (volume) text pages after level 20, then GameOver
 1854:06a5 ShowLevelTitle            # (level) level name, wait 48-level ticks or a key
 1854:1017 FlushKeyboard
 1000:1c1f SnapshotForSave           # StartLevel copies level/score/counters to DS:7590 for S

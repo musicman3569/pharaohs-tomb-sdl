@@ -366,21 +366,17 @@ static void kill_player(void);
 /* ------------------------------------------------------------------------------------------ */
 /* Dying, treasure, level changes                                                             */
 
-/* KillPlayer's game-over branch (after 1000:3336, whose high score entry isn't ported). The
- * volume-complete case (1854:4E01) isn't decoded yet and reuses this screen with its own text. */
-static void game_over_screen(const char *why)
+/* KillPlayer's game-over branch, after GameOver (1000:3336). */
+static void game_over_screen(void)
 {
     G.quit = true;
     G.game_over = true;
     g3_graph_color_mode();
     text_select_font(G.data, FONT_MENU);
     text_color(2);
-    if (strcmp(why, "GAME OVER") == 0)
-        text_draw_at(12, 12, "G A M E   O V E R");
-    else
-        text_draw_centered(2, 12, why);
+    text_draw_at(12, 12, "G A M E   O V E R");
     text_draw_frame(G.data, 1, 2, 2, 38, 24);
-    plat_status(why);
+    plat_status("GAME OVER");
     plat_delay(36);
 }
 
@@ -400,7 +396,7 @@ static void kill_player(void)
     G.loop_c = 20;
     if (G.lives < 0) {
         menu_game_over(G.score); /* GameOver (1000:3336): high score entry */
-        game_over_screen("GAME OVER");
+        game_over_screen();
     } else {
         draw_status_bar();
         game_start_level(G.level);
@@ -658,8 +654,12 @@ static void touch_tile(int x, int y)
     case 0xFF: /* exit */
         next_level();
         if (G.level > G.data->num_levels) {
-            game_over_screen("VOLUME COMPLETE"); /* stands in for the 1854:4E01 ending */
+            /* VolumeEnding (1854:4E01), then GameOver (1000:3336): the high-score entry, which
+             * also sets the quit and game-over flags. No "G A M E  O V E R" frame here. */
+            menu_volume_ending(G.data->volume);
             menu_game_over(G.score);
+            G.quit = true;
+            G.game_over = true;
         } else
             game_start_level(G.level);
         break;

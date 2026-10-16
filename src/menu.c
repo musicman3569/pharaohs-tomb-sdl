@@ -140,6 +140,12 @@ static void run_game_screen(unsigned off, const uint16_t *args, int nargs)
     run_screen(gamedata_addr(data, SEG_GAME, off), (unsigned)(SEG_GAME + data->seg_delta), args, nargs);
 }
 
+void menu_volume_ending(int volume)
+{
+    const uint16_t args[1] = {(uint16_t)volume};
+    run_game_screen(GAME_VOLUME_ENDING, args, 1);
+}
+
 /* ------------------------------------------------------------------------------------------ */
 
 void menu_title_screen(void)

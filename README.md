@@ -31,8 +31,8 @@ in the original, using the game's own fonts from the EXE plus the port's own 8x8
 plain ASCII (standing in for the IBM BIOS font, which can't be shipped). It **starts like the
 original**: the title picture and walking demo, then the main menu with instructions, story,
 ordering info, keyboard setup, joystick screen and high scores (read from and saved to the
-game's own `PTOMBn.HS`, so existing scores carry over). Saving and restoring games (S / R) works with the original's `.SAV` files. Not yet: the joystick
-itself, the end-of-volume sequence, and the exact Genus picture-transition effects
+game's own `PTOMBn.HS`, so existing scores carry over). Saving and restoring games (S / R) works with the original's `.SAV` files. The end-of-volume pages run after level 20. Not yet: the joystick
+itself and the exact Genus picture-transition effects
 (approximated as wipes).
 
 The port reads `PTOMBn.MNU`, `PTOMBn.HS`, `PTOMBn.SAV` and `PTOMB.CFG` from the folder the EXE is in, and
@@ -89,7 +89,8 @@ Port keys:
 Command line: `--level N` (skip the title and menu and play that level, then exit),
 `--palette 0|1`, `--bright`, `--keys 1|2|3` (override PTOMB.CFG), `--cheat` (the menu cheat:
 invincible, unlimited spears), `--screenshot out.png` (render one level to a file and exit),
-`--sound-test` (play every sound effect once, named in the title bar), `--debug-exe` (print
+`--sound-test` (play every sound effect once, named in the title bar), `--ending` (show this
+volume's ending pages), `--debug-exe` (print
 what the port found in the EXE), and two testing aids: `--script "..."` (scripted input, e.g.
 `--script "wait 70; down right; wait 18; up right; shot a.png; quit"`, times in 18.2 Hz ticks)
 and `--record-audio out.wav` (capture everything the speaker plays).

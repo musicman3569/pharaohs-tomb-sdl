@@ -37,6 +37,7 @@ typedef struct {
     const char *record_audio;
     int sound_test;
     int debug_exe;
+    int ending;
 } options_t;
 
 /* --debug-exe: print what was found in the EXE (for checking the pattern scanners). */
@@ -91,6 +92,8 @@ static int parse_args(int argc, char **argv, options_t *o)
             o->sound_test = 1;
         else if (!strcmp(a, "--debug-exe"))
             o->debug_exe = 1;
+        else if (!strcmp(a, "--ending"))
+            o->ending = 1;
         else if (a[0] == '-') {
             fprintf(stderr, "usage: ptomb [PTOMBn.EXE] [--level N] [--palette 0|1] [--bright] "
                             "[--keys 1|2|3] [--cheat] [--screenshot out.png]\n");
@@ -188,7 +191,10 @@ int main(int argc, char **argv)
     if (opt.script)
         plat_set_script(opt.script);
 
-    if (opt.level_given) {
+    if (opt.ending) {
+        /* testing: just this volume's ending pages */
+        menu_volume_ending(data.volume);
+    } else if (opt.level_given) {
         /* straight into a level (testing): play once, then exit */
         game_reset_state(&data, layout);
         game_play(opt.level, opt.cheat != 0);

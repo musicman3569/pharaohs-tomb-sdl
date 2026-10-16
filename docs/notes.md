@@ -490,8 +490,7 @@ vertical hazards, elevators and bats moving (levels 2, 3, 5, 9). On level 16, a 
 right-hand walker (+250) and the left one kills the player. Freeze and the dart traps are ported
 but haven't been exercised in a scripted run yet.
 
-Not done yet: the joystick, the volume ending
-(1854:4E01), the text-mode exit screen (1854:60C8), and the Genus transition effects (approximated).
+Not done yet: the joystick, the text-mode exit screen (1854:60C8), and the Genus transition effects (approximated).
 The glint off-by-one (entry 0 at (0, 0)) is kept on purpose.
 
 ## Title screen, menus and high scores
@@ -601,3 +600,29 @@ and volume 2 level 3, 3 T, 40 treasure, 3 lives, 1 spear, 20,150 points.
   the EXE (SaveGame's spelling otherwise). Verified: restoring both of the user's saves and saving
   again gives byte-identical files; saving on volume 1 level 3 writes `03 00 00 00 00 00 04 00
   02 00` + a zero Real + `00`.
+
+## Volume ending
+
+When the exit tile takes `[75D0]` to 21 (1000:4A8D), TouchTile calls **VolumeEnding(volume)
+(1854:4E01)** and then **GameOver (1000:3336)**: the high-score entry, which sets the quit and
+game-over flags, so PlayGame returns to the main menu. KillPlayer's "G A M E   O V E R" frame
+isn't shown on this path.
+
+VolumeEnding is a long run of text with no animation (the ~1200 instructions are mostly pushes
+for DrawTextCentered): StackCheck, then `case volume of`, each case a set of pages. A page is
+GraphColorMode, menu font, "END OF THE ROAD..." on row 1, game font, the body text in colours 1-3,
+then menu font, "... PRESS ANY KEY ..." on row 25 and WaitKey (1854:1043). Every case then jumps to
+a shared tail (1854:56EE) that draws that prompt again and waits once more.
+
+| Volume | Pages | Contents |
+|--------|-------|----------|
+| 1 | 2 | the lost tomb and the ring; an order-the-other-volumes page with the authors' names |
+| 2 | 1 | the sacred cross, a rest |
+| 3 | 1 | Nevada Smith's journal |
+| 4 | 3 | the finale with Professor Jones, "THE END" and a 1991 teaser |
+
+Volumes 1-3's last page has no WaitKey of its own (the tail's is the only one), but volume 4's
+does, so its last page needs two key presses. Kept.
+
+All of it fits the instruction forms `screenvm` already knew, so the port runs the routine
+straight from the EXE (`menu_volume_ending`) and `--ending` shows it for testing.

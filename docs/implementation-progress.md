@@ -80,7 +80,7 @@ uses and stays available (F1).
   (glints) stable. This is a choice, not something verified.
 - **Text screens run through `screenvm`**: an interpreter for the ~30 instruction forms those
   routines use, with calls routed to port functions. It covers ShowInstructions, ShowStory,
-  ShowOrderingInfo, ConfigKeyboard (game unit) and JoystickMenu (main program). It **fails
+  ShowOrderingInfo, ConfigKeyboard, VolumeEnding (game unit) and JoystickMenu (main program). It **fails
   closed** on anything unknown. Chosen so the long text stays in the EXE.
 - **Hand-ported** TitleScreen, MainMenu, ShowHighScores and GameOver (they use strings, Reals
   and arrays). Their constant text comes from `gamedata_text_ops`, which scans a routine's
@@ -123,6 +123,8 @@ Verified (by scripted runs, screenshots, recordings or byte comparison):
 - Save/restore on temp copies: R loads the user's `PTOMB1.SAV` (level 20, 951,000) and
   `PTOMB2.SAV`; S then rewrites them byte-identically; a missing file shows the original's
   message. Not exercised: dying after a restore (the stale level-start counters quirk).
+- Volume ending: `--ending` screenshots of every page on all four volumes. Not exercised: reaching
+  it through level 20's exit in play (the call sequence there is two lines).
 - Locators (`--debug-exe`) work on all four volumes; the game unit's offsets match in all four.
 
 Assumed / unverified (check in DOSBox when possible):
@@ -137,8 +139,7 @@ Assumed / unverified (check in DOSBox when possible):
 
 ## Outstanding issues and known gaps
 
-- Not ported: the **volume ending** (1854:4E01, ~1200 instructions; a placeholder "VOLUME COMPLETE" screen
-  stands in); the joystick; the text-mode exit screen (1854:60C8); StartLevel's 2714:095C
+- Not ported: the joystick; the text-mode exit screen (1854:60C8); StartLevel's 2714:095C
   Randomize (approximated by reseeding).
 - The port **writes into the EXE's folder** (`PTOMBn.HS` on a new high score, `PTOMB.cfg` from
   Config Keyboard, `PTOMBn.SAV` on S), as the original does. Test against a copy (see below).
@@ -148,8 +149,7 @@ Assumed / unverified (check in DOSBox when possible):
 ## Next steps (suggested order)
 
 1. ~~Save/restore~~: done (`notes.md`, "Save and restore"); restores the user's own saves.
-2. **Volume ending** 1854:4E01: probably text screens plus animation; check whether
-   `screenvm` can run it before hand-porting.
+2. ~~Volume ending~~: done; `screenvm` runs 1854:4E01 from the EXE (`--ending` shows it).
 3. Optional: decode the Genus effect jump table for exact transitions; joystick via SDL
    GameController; verify the assumptions above in DOSBox if it gets installed.
 

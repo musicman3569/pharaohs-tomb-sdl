@@ -18,6 +18,9 @@ void menu_main(bool cheat_from_command_line);
 /* GameOver (1000:3336): if the score made the table, ask for a name and save it. */
 void menu_game_over(double score);
 
+/* VolumeEnding (1854:4E01): the text pages shown after level 20 of a volume. */
+void menu_volume_ending(int volume);
+
 /* ShowHighScores (1000:5403); wait = wait for a key afterwards. */
 void menu_show_high_scores(bool wait);
 
