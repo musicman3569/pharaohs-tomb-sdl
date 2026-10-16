@@ -7,8 +7,8 @@ re-released as freeware in 2009) with Ghidra, then porting it to run natively on
 |:---:|:---:|
 | ![The main menu](docs/screenshots/main-menu.png) | ![Level 1, At the Pyramid](docs/screenshots/level-01-at-the-pyramid.png) |
 | The main menu | Level 1: At the Pyramid |
-| ![Level 5, The Grand Gallery](docs/screenshots/level-05-the-grand-gallery.png) | ![Level 9, Karnak's Tomb](docs/screenshots/level-09-karnaks-tomb.png) |
-| Level 5: The Grand Gallery | Level 9: Karnak's Tomb |
+| ![Level 4, The Chamber of Isis](docs/screenshots/level-04-the-chamber-of-isis.png) | ![Level 5, The Grand Gallery](docs/screenshots/level-05-the-grand-gallery.png) |
+| Level 4: The Chamber of Isis | Level 5: The Grand Gallery |
 
 ## Layout
 
