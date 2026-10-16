@@ -163,9 +163,10 @@ Assumed / unverified (check in DOSBox when possible):
 1. Fix an inconsistent movement glitch where sometimes collision with a collectible like coins 
    blocks movement (e.g. interrupts a jump mid-flight) and other times not.
 2. Higher frame rate and smoother movement.
-3. Fullscreen mode
-4. Menu mouse support and/or arrow/controller movement highlighting of options instead of letters/shortcuts
-5. Graphics remaster from 3-color CGA to 256 colors
+3. Accurate hit detection. The current bounding boxes are too big an inaccurate.
+4. Fullscreen mode
+5. Menu mouse support and/or arrow/controller movement highlighting of options instead of letters/shortcuts
+6. Graphics remaster from 3-color CGA to 256 colors
 
 ## How to work here (lessons from this session)
 
