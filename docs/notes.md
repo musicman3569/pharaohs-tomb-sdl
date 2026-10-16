@@ -114,7 +114,48 @@ Sprite = set/frame from the sprite table above. Map = tile code written to the m
 | `7 8 9 0` | 12 16 17 18 | 4/0 brick | hidden? | | | | | |
 
 `x` is the ordinary brick; one in ten gets map code 18 at random. `}`, `{`, `[`, `7`-`0` draw
-as plain brick but carry their own map codes, so they are probably secret or breakable walls.
+as plain brick but carry their own map codes: they're hidden items and door walls (see below).
+
+### Tile map codes (TouchTile, 1000:3B2D)
+
+GameTick calls `TouchTile(y, x)` for 9 points around the player box. It reads
+`map[y div 16 + 1][x div 16 + 1]` and switches on the code. Nothing happens if the game-over
+flag `[7964]` is set. "Erase" means the cell is cleared to 0 and overwritten with the blank
+16x16 picture at B6AA. Points are TP `Real` constants decoded from the code.
+
+| Code | Chars | What it is | Effect | Points |
+|------|-------|------------|--------|--------|
+| 00 | (empty) | nothing | | |
+| 01 | `k` | **cyan key** | `[7961]` = 1, erase | 100 |
+| 02 | `d` | **cyan keyhole** | needs `[7961]`; uses the key, erases itself, then **opens the exit door**: every code-04 cell slides down 16 px and every code-05 cell slides up, with a rumble, and both become code FF (exit) | 500 |
+| 03 | `p` | **spear** | spears `[75E2]` +1 (max 5), erase | 100, or 10,000 if already at 5 |
+| 04 | `}` | **exit door (slides down)** | looks like brick; inert until the keyhole is used | |
+| 05 | `{` | **exit door (slides up)** | same, slides up | |
+| 06 | `c` | **gem / treasure** | erase, remove from the glint list, treasure +1 | 50 + 50 |
+| 07 | `r` | **magenta key** | `[7962]` = 1, erase | 100 |
+| 08 | `R` | **magenta lock block** | needs `[7962]`; uses the key and erases the block (a locked barrier) | 500 |
+| 09 | `\|` `` ` `` `-` `=` | **spikes / hazards** | `KillPlayer` | |
+| 0A | `.` | **crumbling brick** | inert until a code-0B trigger is touched | |
+| 0B | `>` | **invisible trigger** | every code-0A cell crumbles away (set 16 frames 0->3) | |
+| 0C/0E/10 | `1` `2` `3` | **switch** (11/2) | erase, then every cell with code+1 (0D/0F/11) **builds a brick** (set 16 frames 3->0). Bricks are solid because collision reads pixels | 100 |
+| 0D/0F/11 | `4` `5` `6` | **invisible brick spots** | targets of switches 1/2/3 | |
+| 12 | `7` | **brick with hidden treasure** | flashes a gem, treasure +5, brick stays | 5 x 50 |
+| 13 | `i` | **invisible transform trigger** | erase, sound; player drawn from **set 17** for 300 steps (`[795E]`, `[75F2]`; purpose not confirmed, level 17 starts this way) | |
+| 14 | `T` | **"T" collectible** (14/0) | erase, T count `[75EC]` +1; 5 of them -> 50,000 and reset | 1,000 |
+| 15 | `F` | **freeze** (12/3) | erase, `[7968]` = 1: all enemies stop for 3000 steps | 1,000 |
+| 16 | `8` | **brick with hidden treasure** | treasure +10 | 10 x 50 |
+| 17 | `9` | **brick with hidden treasure** | treasure +25 | 25 x 50 |
+| 18 | `0`, 1 in 10 `x` | **brick with hidden bonus** | random 1..3: shows the 10K / 15K / 20K sign and counts up 10/15/20 x 1,000 with rising beeps | 10,000-20,000 |
+| 19 | `[` | **brick with hidden extra life** | once per level (`[796B]`): shows a player icon, lives +1 (max 5) | 10 x 5,000 if lives full |
+| 1A-1D | `t` `u` `v` `w` | **artifacts** (4/1-3, 15/2) | erase, sound | **100,000** |
+| FF | `Z`, opened doors | **exit** | saves spears/T count/treasure for the next level, level `[75D0]` +1; after level 20 the volume-complete ending, otherwise StartLevel | 1,000 |
+
+Related counters (shown by `DrawStatusBar`, 1000:0671):
+
+- **Treasure** `[75E6]`: `AddTreasure(n)` adds n with a beep and 50 points each. At 100 you get
+  +1 life (or 50,000 if at 5 lives) and it resets.
+- **Lives** `[75E4]`: starts at 4, max 5.
+- Shooting a walker (types 2 and 8) is worth 250.
 
 ## Enemies
 
@@ -148,8 +189,8 @@ branch per type. Movement per step is `speed * dx` / `speed * dy` pixels.
 | 9 | `P` | 15/0 | **Dart trap, fires right.** When the player is on its row it shoots a dart (a plotted dot) moving +4 px per tick of `[7F72]` until it hits a wall, the screen edge, or the player. | dart kills | no |
 | 10 | `O` | 15/1 | Dart trap, fires left (`[7F70]`, -4 px). | dart kills | no |
 
-- `[7968]` freezes all enemies. It counts up in `[75EA]` and clears after 3000 steps, so it's
-  probably a pickup.
+- `[7968]` freezes all enemies. It's set by the `F` freeze pickup (tile code 15), counts up in
+  `[75EA]`, and clears after 3000 steps.
 - `c` tiles aren't enemies. They go into a spawn-point list at `7606 + n*6`; GameTick
   occasionally (5 in 100) plays a set-21 "glint" animation on a random one.
 
@@ -188,7 +229,7 @@ main (1000:8473)
   LoadConfig                             PTOMB.CFG: 1 byte, default '3'
   TitleScreen                            shows PTOMB1.MNU (PCX) + credits
   MainMenu loop
-    E/Space/Enter -> PlayGame            + -> RestoreSavedGame then PlayGame
+    E/Space/Enter -> PlayGame            + with Scroll Lock on -> [795D]=1, PlayGame (cheat? unexplored)
     I Instructions  S Story  H HighScores  C ConfigKeyboard  J JoystickMenu
     O OrderingInfo  Q quit
   RestoreKeyboardISR
@@ -203,9 +244,12 @@ GameTick (1000:4f69), once per frame
   if ticks[7f6c] > 0: MoveEnemies, ...
   gravity via GetDotColor below the player
   joystick buttons -> jump / fire
-  keys: Space jump, P pause, S save, R restore, E sound on/off, Q/Esc quit prompt
+  keys: Space jump, P pause, S save, R restore, E sound on/off, Q/Esc quit prompt,
+        + with Scroll Lock on -> 1000:3AD7 (unexplored)
+  PlayerMoveHorizontal: ISR arrow flags, or Shift/Ctrl/Alt (ReadShiftKeys, layout chosen by
+        the PTOMB.CFG byte), or joystick; levels with [7971]/[7972] push the player +-2 (wind)
   if ticks[7f6e] > 0: animate x4
-  probe 9 points around the player box (CheckPointHit)
+  probe 9 points around the player box (TouchTile)
 ```
 
 ## Key variables (DS)
@@ -214,7 +258,15 @@ GameTick (1000:4f69), once per frame
 |-----------|-----------------------------------------|
 | 74DC/74DE | player X / Y (pixels)                   |
 | 75CE      | volume number (1..4)                    |
-| 75E2      | ammo? (starts at 2, fire needs > 0)     |
+| 75D0      | level within the volume (1..20)         |
+| 75E2      | spears (starts at 2, max 5)             |
+| 75E4      | lives (starts at 4, max 5)              |
+| 75E6      | treasure count (100 -> extra life)      |
+| 75EC      | "T" collectibles (5 -> 50,000 points)   |
+| 7961/7962 | holding cyan / magenta key              |
+| 7968      | enemies frozen (F pickup)               |
+| 7982      | score (6-byte TP Real, 7982-7987)       |
+| 7977-797B | Ctrl, Alt, LShift, RShift, ScrollLock   |
 | 7963      | quit-to-menu flag                       |
 | 7964      | game-over flag                          |
 | 7994      | sound effects on                        |

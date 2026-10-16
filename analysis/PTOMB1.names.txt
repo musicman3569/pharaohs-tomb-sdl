@@ -10,7 +10,7 @@
 1000:6227 TitleScreen
 1000:5a9f MainMenu
 1000:53b7 PlayGame
-1000:4af1 RestoreSavedGame
+1000:4af1 ReadShiftKeys             # INT 16h AH=2 -> 7979 LShift, 797A RShift, 7977 Ctrl, 7978 Alt, 797B ScrollLock
 1000:5403 ShowHighScores
 1000:57c4 JoystickMenu
 
@@ -85,7 +85,7 @@
 1000:1fa0 MoveEnemies               # per tick: one branch per enemy type 1..10
 1000:4dd4 PlayerJump_guess          # Space / joystick button 1
 1000:4df0 PlayerFire_guess          # joystick button 2 / fire keys, needs [75e2] > 0
-1000:3b2d CheckPointHit_guess       # probed at 9 points around the player box
+1000:3b2d TouchTile                 # (y, x) switch on tile map code; probed at 9 points around the player
 1000:5e20 SaveGame_guess            # 'S' in game
 1000:5f3b RestoreGame_guess         # 'R' in game
 1854:1330 ClearStatusLine_guess
@@ -107,3 +107,12 @@
 1854:5900 AwardKillScore_guess      # after shooting a type 2/8 enemy
 1f47:035b Graph3_Draw               # line (x1, y1, x2, y2, color); the player's shot is a line
 1f47:03ed Graph3_Plot_guess         # used to draw/erase arrow-trap darts
+
+# --- Tile effects (from TouchTile) ---
+1000:3a64 AddTreasure               # (n) treasure += n, 50 points each, beep per point
+1000:0671 DrawStatusBar             # score, lives, keys, treasure, T count, spears; 100 treasure -> life
+1000:4b90 PlayerMoveHorizontal      # ISR keys / shift keys / joystick; wind on levels with [7971]/[7972]
+1000:4ad7 PushPlayer_guess          # (dx) used for the wind/conveyor push
+1000:00b9 PlayArtifactSound_guess
+1854:15f0 PlaySoundEffect_guess     # many tone/duration args
+20f5:000b Dos_Intr
