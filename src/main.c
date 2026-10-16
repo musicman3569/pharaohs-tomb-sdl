@@ -1,6 +1,7 @@
 /* Pharaoh's Tomb port: entry point and game loop.
  *
- *   ptomb [PTOMBn.EXE] [--level N] [--palette 0|1] [--bright] [--keys 1|2|3] [--cheat]
+ *   ptomb [PTOMBn.EXE] [--classic | --enhanced] [--set section.key=value ...] [--config FILE]
+ *         [--print-settings] [--level N] [--palette 0|1] [--bright] [--keys 1|2|3] [--cheat]
  *         [--screenshot out.png] [--script "wait 40; down right; wait 10; up right; shot a.png; quit"]
  *
  * Starts like the original: title screen, then the main menu. --level N goes straight into a
@@ -16,20 +17,25 @@
 #include <string.h>
 
 #include "cga.h"
+#include "gamepad.h"
 #include "game.h"
 #include "gamedata.h"
 #include "level.h"
 #include "menu.h"
 #include "platform.h"
 #include "platform_sdl.h"
+#include "settings.h"
 #include "sound.h"
 
 typedef struct {
     const char *exe_path;
     int level;
     int level_given;
-    int palette; /* 0 by default: the project's preferred look; 1 is the game's own */
-    int bright;
+    int preset;            /* --classic / --enhanced, or -1 */
+    const char *config;    /* --config FILE, or NULL for ptomb.ini next to ptomb.exe */
+    const char *sets[32];  /* --set key=value, in order (--palette / --bright become these) */
+    int n_sets;
+    int print_settings;
     int keys;    /* PTOMB.CFG layout for the alternate keys */
     int cheat;
     const char *screenshot;
@@ -68,16 +74,26 @@ static int parse_args(int argc, char **argv, options_t *o)
     o->exe_path = "PTOMB1.EXE";
     o->level = 1;
     o->keys = 0; /* 0 = use PTOMB.CFG */
+    o->preset = -1;
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
-        if (!strcmp(a, "--level") && i + 1 < argc) {
+        const char *set = NULL;
+        if (!strcmp(a, "--classic") || !strcmp(a, "--enhanced"))
+            o->preset = settings_preset_by_name(a + 2);
+        else if (!strcmp(a, "--set") && i + 1 < argc)
+            set = argv[++i];
+        else if (!strcmp(a, "--config") && i + 1 < argc)
+            o->config = argv[++i];
+        else if (!strcmp(a, "--print-settings"))
+            o->print_settings = 1;
+        else if (!strcmp(a, "--level") && i + 1 < argc) {
             o->level = atoi(argv[++i]);
             o->level_given = 1;
         }
         else if (!strcmp(a, "--palette") && i + 1 < argc)
-            o->palette = atoi(argv[++i]) ? 1 : 0;
+            set = atoi(argv[++i]) ? "display.palette=1" : "display.palette=0";
         else if (!strcmp(a, "--bright"))
-            o->bright = 1;
+            set = "display.bright=on";
         else if (!strcmp(a, "--keys") && i + 1 < argc)
             o->keys = argv[++i][0];
         else if (!strcmp(a, "--cheat"))
@@ -95,11 +111,71 @@ static int parse_args(int argc, char **argv, options_t *o)
         else if (!strcmp(a, "--ending"))
             o->ending = 1;
         else if (a[0] == '-') {
-            fprintf(stderr, "usage: ptomb [PTOMBn.EXE] [--level N] [--palette 0|1] [--bright] "
+            fprintf(stderr, "usage: ptomb [PTOMBn.EXE] [--classic | --enhanced] [--set section.key=value] "
+                            "[--config FILE] [--print-settings] [--level N] [--palette 0|1] [--bright] "
                             "[--keys 1|2|3] [--cheat] [--screenshot out.png]\n");
             return -1;
         } else
             o->exe_path = a;
+
+        if (set) {
+            if (!strncmp(set, "game.preset=", 12)) { /* a preset, not just the field */
+                if ((o->preset = settings_preset_by_name(set + 12)) < 0) {
+                    fprintf(stderr, "ptomb: game.preset must be classic or enhanced\n");
+                    return -1;
+                }
+            } else if (o->n_sets < (int)(sizeof o->sets / sizeof o->sets[0])) {
+                o->sets[o->n_sets++] = set;
+            }
+        }
+    }
+    return 0;
+}
+
+/* Settings: the preset, then the INI file, then the command line (see settings.h). */
+static int load_settings(const options_t *o)
+{
+    char path[1024];
+    if (o->config) {
+        snprintf(path, sizeof path, "%s", o->config);
+    } else {
+        char *base = SDL_GetBasePath();
+        snprintf(path, sizeof path, "%sptomb.ini", base ? base : "");
+        SDL_free(base);
+    }
+    static settings_pair_t pairs[64];
+    int n = settings_read_file(path, pairs, 64);
+    if (n < 0) {
+        fprintf(stderr, "ptomb: can't read %s\n", path);
+        n = 0;
+    } else if (n == 0 && o->config) {
+        fprintf(stderr, "ptomb: %s is missing or empty\n", path);
+    }
+
+    int preset = o->preset;
+    for (int i = 0; i < n && preset < 0; i++)
+        if (!strcmp(pairs[i].key, "game.preset") && (preset = settings_preset_by_name(pairs[i].value)) < 0)
+            fprintf(stderr, "ptomb: %s:%d: game.preset must be classic or enhanced\n", path, pairs[i].line);
+    settings_reset(preset < 0 ? PRESET_CLASSIC : (preset_t)preset);
+
+    char err[160];
+    for (int i = 0; i < n; i++)
+        if (strcmp(pairs[i].key, "game.preset") != 0 &&
+            settings_set(pairs[i].key, pairs[i].value, err, sizeof err) != 0)
+            fprintf(stderr, "ptomb: %s:%d: %s (ignored)\n", path, pairs[i].line, err);
+
+    for (int i = 0; i < o->n_sets; i++) {
+        char key[64];
+        const char *eq = strchr(o->sets[i], '=');
+        if (!eq) {
+            fprintf(stderr, "ptomb: --set needs section.key=value, not '%s'\n", o->sets[i]);
+            return -1;
+        }
+        snprintf(key, sizeof key, "%.*s", (int)(eq - o->sets[i]), o->sets[i]);
+        if (settings_set(key, eq + 1, err, sizeof err) != 0) {
+            fprintf(stderr, "ptomb: %s\n", err);
+            return -1;
+        }
     }
     return 0;
 }
@@ -139,8 +215,13 @@ static void sound_test(void)
 int main(int argc, char **argv)
 {
     options_t opt;
-    if (parse_args(argc, argv, &opt) != 0)
+    if (parse_args(argc, argv, &opt) != 0 || load_settings(&opt) != 0)
         return 2;
+    if (opt.print_settings) {
+        settings_write(stdout);
+        return 0;
+    }
+    joy_vars.enabled = (uint8_t)settings.joystick;
 
     static gamedata_t data;
     char err[256];
@@ -160,7 +241,7 @@ int main(int argc, char **argv)
         /* Render one level to a file without opening a window. */
         static level_t lv;
         level_start(&lv, &data, opt.level);
-        const int rc = cga_write_png(opt.screenshot, cga_palette(opt.palette, opt.bright), 2);
+        const int rc = cga_write_png(opt.screenshot, cga_palette(settings.palette, settings.bright), 2);
         if (rc != 0)
             fprintf(stderr, "ptomb: can't write %s\n", opt.screenshot);
         gamedata_free(&data);
@@ -169,7 +250,7 @@ int main(int argc, char **argv)
 
     if (opt.record_audio)
         plat_record_audio(opt.record_audio);
-    if (plat_init(opt.palette, opt.bright, err, sizeof err) != 0) {
+    if (plat_init(err, sizeof err) != 0) {
         fail(err);
         gamedata_free(&data);
         return 1;

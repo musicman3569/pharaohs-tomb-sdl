@@ -106,6 +106,15 @@ uses and stays available (F1).
   turns of a game; `PlayerWalk(0)` turning the player left; free enemy slots running as type 1;
   the spear look-ahead undone even when idle; extended-key scancodes appended in ReadLine.
 
+- **Classic and enhanced in one codebase, chosen by settings** (`settings.c`), not a branch
+  or fork: one build and one set of tests, and fixes reach both. Classic is v1.0.0's behaviour
+  and the default. Each setting has a classic and an enhanced value; the preset comes from
+  `--classic` / `--enhanced`, else `game.preset` in `ptomb.ini` (next to `ptomb.exe`, or
+  `--config`), else classic; the file then overrides single settings, and `--set` overrides the
+  file. **To add an enhancement:** a field in `settings_t`, a row in the table in `settings.c`
+  (classic value = the original behaviour), and a test of `settings.field` where it changes,
+  leaving the classic path exactly as it was. Keep testing classic with `--script` runs.
+
 ## Rejected approaches
 
 - Emulating the whole game (DOSBox-style) or recompiling it: not a port, and it hides the learning.

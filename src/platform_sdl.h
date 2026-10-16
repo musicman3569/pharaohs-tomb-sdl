@@ -4,7 +4,8 @@
 
 #include <stddef.h>
 
-int plat_init(int palette, int bright, char *err, size_t errlen);
+/* Opens the window and audio; the palette and aspect come from settings.h. */
+int plat_init(char *err, size_t errlen);
 void plat_shutdown(void);
 
 void plat_present_now(void);

@@ -8,7 +8,8 @@
 #include "platform_sdl.h"
 
 /* The original switches the joystick off at startup (main, 1000:84A8) until the J menu turns it
- * on. The port starts with it on, so a controller works as soon as it's plugged in. */
+ * on. The port starts with it on (main.c sets it from input.joystick in settings.h), so a
+ * controller works as soon as it's plugged in. */
 joy_vars_t joy_vars = {1, JOY_CENTER, JOY_CENTER};
 
 #define MAX_PADS 8

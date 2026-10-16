@@ -130,6 +130,30 @@ Port keys:
 | F3 | 4:3 aspect correction on/off |
 | F12 | save a screenshot PNG in the current directory |
 
+### Settings
+
+The port has two presets: **classic**, the original game exactly as released in v1.0.0 (the
+default), and **enhanced**, which will switch on every enhancement as they're added (none yet,
+so for now the two play the same). Choose one with `--classic` or `--enhanced`, or in a
+`ptomb.ini` file next to `ptomb.exe`, which can also change single settings:
+
+```ini
+[game]
+preset = classic      ; or enhanced
+
+[display]
+palette = 0           ; 0 = green/red/brown, 1 = cyan/magenta/white (the original's)
+bright = off
+aspect = on           ; stretch to 4:3, as a CRT showed it
+
+[input]
+joystick = on         ; start with the controller on (the original started with it off)
+```
+
+`ptomb --print-settings > ptomb.ini` writes a complete file with every setting explained.
+The command line overrides the file: `--set display.palette=1`, for example. F1-F3 change
+the display settings for the current run only.
+
 ### Command line
 
 ```
@@ -140,8 +164,12 @@ The EXE defaults to `PTOMB1.EXE` in the current folder.
 
 | Option | What it does |
 |--------|--------------|
+| `--classic` / `--enhanced` | choose the preset (overrides `ptomb.ini`) |
+| `--set section.key=value` | change one setting, e.g. `--set display.aspect=off` (can be repeated) |
+| `--config FILE` | read settings from FILE instead of `ptomb.ini` next to `ptomb.exe` |
+| `--print-settings` | print the current settings as a `ptomb.ini` and exit |
 | `--palette 0\|1` | start in palette 0 (green/red/brown, the default) or 1 (cyan/magenta/white, the original) |
-| `--bright` | start in high intensity |
+| `--bright` | start in high intensity (short for `--set display.bright=on`) |
 | `--keys 1\|2\|3` | the walking keys: Shift, Alt / Ctrl or Ctrl / Alt (overrides `PTOMB.CFG`) |
 | `--cheat` | the menu cheat: invincible, with unlimited spears |
 | `--level N` | skip the title and menu, play level N, and exit when you quit |

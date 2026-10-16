@@ -9,6 +9,7 @@
 #include "cga.h"
 #include "gamepad.h"
 #include "platform_sdl.h"
+#include "settings.h"
 #include "timer.h"
 
 isr_keys_t isr_keys;
@@ -18,7 +19,7 @@ static SDL_Renderer *ren;
 static SDL_Texture *tex;
 static SDL_AudioDeviceID audio;
 
-static int palette, bright, aspect_43 = 1, shot_no;
+static int shot_no;
 static bool quitting;
 static int level_step;
 
@@ -160,7 +161,7 @@ void plat_nosound(void)
 
 static SDL_Rect fit_rect(int win_w, int win_h)
 {
-    const double ar = aspect_43 ? 4.0 / 3.0 : 320.0 / 200.0;
+    const double ar = settings.aspect_43 ? 4.0 / 3.0 : 320.0 / 200.0;
     SDL_Rect r;
     r.w = win_w;
     r.h = (int)(win_w / ar + 0.5);
@@ -178,7 +179,7 @@ static void present(void)
     void *pixels;
     int pitch;
     if (SDL_LockTexture(tex, NULL, &pixels, &pitch) == 0) {
-        cga_to_argb(pixels, pitch / 4, cga_palette(palette, bright));
+        cga_to_argb(pixels, pitch / 4, cga_palette(settings.palette, settings.bright));
         SDL_UnlockTexture(tex);
     }
     int ow, oh;
@@ -242,13 +243,13 @@ static void key_down(const SDL_KeyboardEvent *k)
 
     switch (sym) {
     /* front-end keys, not seen by the game */
-    case SDLK_F1: palette ^= 1; return;
-    case SDLK_F2: bright ^= 1; return;
-    case SDLK_F3: aspect_43 ^= 1; return;
+    case SDLK_F1: settings.palette ^= 1; return; /* for this run; ptomb.ini isn't changed */
+    case SDLK_F2: settings.bright ^= 1; return;
+    case SDLK_F3: settings.aspect_43 ^= 1; return;
     case SDLK_F12: {
         char name[64];
         snprintf(name, sizeof name, "ptomb_shot%02d.png", shot_no++);
-        if (cga_write_png(name, cga_palette(palette, bright), 2) == 0)
+        if (cga_write_png(name, cga_palette(settings.palette, settings.bright), 2) == 0)
             printf("saved %s\n", name);
         return;
     }
@@ -377,7 +378,7 @@ static void run_script(void)
             script_tap_pending = tap_key;
             script_wait_until = tick_total + 1;
         } else if (!strcmp(cmd, "shot")) {
-            if (cga_write_png(arg, cga_palette(palette, bright), 2) == 0)
+            if (cga_write_png(arg, cga_palette(settings.palette, settings.bright), 2) == 0)
                 printf("[tick %u] saved %s  %s\n", tick_total, arg, status_text);
         } else if (!strcmp(cmd, "quit"))
             quitting = true;
@@ -481,10 +482,8 @@ void plat_pace(int hz)
 
 /* --- set-up -------------------------------------------------------------------------------- */
 
-int plat_init(int pal, int bri, char *err, size_t errlen)
+int plat_init(char *err, size_t errlen)
 {
-    palette = pal;
-    bright = bri;
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0) {
         snprintf(err, errlen, "%s", SDL_GetError());
         return -1;

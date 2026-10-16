@@ -15,6 +15,7 @@ add_executable(ptomb
     src/text.c
     src/font8x8.c
     src/screenvm.c
+    src/settings.c
     src/pcx.c
     src/hiscore.c
     src/menu.c
