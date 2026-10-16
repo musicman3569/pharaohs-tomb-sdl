@@ -88,8 +88,8 @@
 1000:3b2d TouchTile                 # (y, x) switch on tile map code; probed at 9 points around the player
 1000:5e20 SaveGame_guess            # 'S' in game
 1000:5f3b RestoreGame_guess         # 'R' in game
-1854:1330 ClearStatusLine_guess
-1854:1446 DrawTextRow_guess         # (str, row, color); row 25 = status line
+1854:1330 ClearStatusLine           # 39 spaces at (1,25)
+1854:1446 DrawTextCentered          # (color, row, s) A-Z remapped +41h into the INT 1Fh font
 
 # --- Graph3 / Joystick, confirmed from GameTick ---
 1f47:069c Graph3_PutPic             # (buffer, x, y)
@@ -137,3 +137,14 @@
 1854:592f SfxBonus                  # SoundSweep 10..3000 step 750, staccato
 1854:595f SfxDeath                  # SoundSweep 1000 down to 100 step 200
 1854:598f SfxUnlock                 # SoundSweep 1500..3000 step 200
+
+# --- Text (see docs/notes.md "Text and fonts") ---
+1854:1385 DrawTextAt                # (col, row, s) A-Z remapped +41h
+1854:1520 DrawNumber                # (value, col, row) digits remapped into the font
+1854:114f DrawFrame                 # (color, left, top, right, bottom) border glyphs 80h-89h
+1854:1078 SelectFontFrame           # INT 1Fh -> DS:7180
+1854:10a3 SelectFontGame            # INT 1Fh -> DS:6180
+1854:10ce SelectFontMenu            # INT 1Fh -> DS:6580
+1854:10f9 SelectFontTitle           # INT 1Fh -> DS:6980
+1854:1124 SelectFontExtra           # INT 1Fh -> DS:6D80
+2081:0215 Crt_GotoXY

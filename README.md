@@ -26,8 +26,10 @@ playable**. You can walk, jump, fall, throw spears, and pick up or trigger every
 score and level changes, and **all ten enemy types move and fight**: platforms, walkers you
 can spear, pushable blocks, vertical hazards, elevators, ceiling bats, dart traps, plus the
 freeze pickup. **All the original PC-speaker sound effects** play (E toggles them, as in the
-game). Not yet: the status bar text (shown in the window title instead), the menus, saving,
-and the joystick.
+game). The **status bar, prompts, level titles and game-over screen** are drawn on screen as
+in the original, using the game's own fonts from the EXE plus the port's own 8x8 font for
+plain ASCII (standing in for the IBM BIOS font, which can't be shipped). Not yet: the title
+screen and menus, saving, high scores, and the joystick.
 
 ### Build (Windows, MSYS2 mingw64)
 

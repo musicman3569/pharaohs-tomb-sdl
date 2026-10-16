@@ -25,7 +25,22 @@ typedef struct {
     int num_levels;
     /* rows[level-1][row-1] = 20 tile characters, NUL-terminated */
     char rows[MAX_LEVELS][LEVEL_ROWS][LEVEL_COLS + 1];
+
+    int volume;                                /* 1..4, from the 'ptombN' name in main */
+    char level_names[MAX_LEVELS][41];          /* ShowLevelTitle's names for this volume */
+    /* The game's own fonts for characters 80h-FFh (what it points INT 1Fh at): 128 glyphs x
+     * 8 bytes, rows top first. Index by font_id_t. */
+    uint8_t fonts[5][128 * 8];
 } gamedata_t;
+
+/* Which font-select routine (1854:1078..1124) picks each table. */
+typedef enum {
+    FONT_FRAME,  /* 1854:1078, DS:7180  border pieces for DrawFrame */
+    FONT_GAME,   /* 1854:10A3, DS:6180  in-game: letters, digits, status icons */
+    FONT_MENU,   /* 1854:10CE, DS:6580  menus, game over */
+    FONT_TITLE,  /* 1854:10F9, DS:6980  title and high scores */
+    FONT_EXTRA,  /* 1854:1124, DS:6D80 */
+} font_id_t;
 
 /* Load and scan an EXE. Returns 0, or -1 with a message in err. */
 int gamedata_load(gamedata_t *g, const char *path, char *err, size_t errlen);

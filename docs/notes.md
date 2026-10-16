@@ -255,6 +255,61 @@ copies into `[797B]`. `+` is read through Crt `ReadKey`, so either `+` key works
 | Main menu | Scroll Lock on, `+` | `[795D]` = 1, then start the game. **Invincible + unlimited spears**: `KillPlayer` takes a life and then gives it back, and `PlayerFire` does the same with the spear. Dying still plays the death animation and restarts the level. `ResetGameState` clears the flag, so it lasts for one game. |
 | In game | Scroll Lock on, `+` | `CheatSkipLevel` (1000:3AD7): if level < 20, carry spears / T count / treasure over like a normal exit, +1,000 points, start the next level. Works with or without cheat mode. |
 
+## Text and fonts
+
+The game writes text with Crt (GotoXY, TextColor, Write) while in CGA mode 4, so the BIOS
+draws each character as an opaque 8x8 cell on a 40x25 grid: ink in `TextColor & 3`, the rest
+colour 0. In graphics modes the BIOS takes characters 00h-7Fh from its ROM font and 80h-FFh
+from the table INT 1Fh points at.
+
+**The game ships five fonts of its own** in the data segment (128 glyphs x 8 bytes, rows top
+first) and points INT 1Fh at one directly (`mov es:[007Ch], offset/segment`, not SetIntVec):
+
+| Routine | Table | Used for |
+|---------|-------|----------|
+| 1854:1078 | DS:7180 | DrawFrame border pieces (Greek-key corners and edges, 80h-89h) and more decorative tiles. Only 108 glyphs are stored; the rest is BSS |
+| 1854:10A3 | DS:6180 | **in game** (StartLevel): A-Z at 82h-9Bh, status icons 9Ch life, 9Dh spear, 9Eh treasure, 9Fh key, A0h T, digits B4h-BDh, plus pre-drawn "PRESS ENTER TO CONTINUE" / "ANY KEY" |
+| 1854:10CE | DS:6580 | menus, game over |
+| 1854:10F9 | DS:6980 | title, high scores |
+| 1854:1124 | DS:6D80 | another lettering style |
+
+Two tables carry leftover text from the tool that made them: an author credit (a
+Western Washington University address) and "VER 2.0 FEB 1986".
+
+The text routines **remap characters into those fonts**: DrawTextAt (1854:1385, `(col, row, s)`)
+and DrawTextCentered (1854:1446, `(color, row, s)`, column `(40 - len) div 2 + 1`) add 41h to
+A-Z (set at 1854:1365). DrawNumber (1854:1520, `(value, col, row)`) prints Str(Trunc(value))
+with '1'-'9' + 83h and '0' + 8Dh (set at 1854:1500). Everything else, including spaces,
+punctuation and a lowercase `x`, is printed as-is from the ROM font. ClearStatusLine
+(1854:1330) writes 39 spaces at (1, 25), one short of the cell that would make the BIOS scroll.
+
+**DrawFrame(color, left, top, right, bottom)** (1854:114F) selects the frame font and draws
+80h / 81h... / 83h along the top, 84h / 85h down the sides, and 86h / 87h... / 89h along the
+bottom. StartLevel draws (5,10)-(35,14) in colour 3 around the level name, and game over draws
+(2,2)-(38,24) in colour 1.
+
+**Status bar** (DrawStatusBar, 1000:0671, row 25):
+
+| Columns | What | Colour |
+|---------|------|--------|
+| 1- | score (DrawNumber) | 2 |
+| 9-13 | 9Ch x 5 lives | 1 for each life you have, else 2 |
+| 17 / 18 | 9Fh magenta / cyan key | 2 / 3 if held, else 0 (invisible) |
+| 21, 22, 23- | 9Eh treasure, `x`, count | 3, 2, 2 |
+| 27-31 | A0h x 5 T collectibles | 1 / 2 |
+| 35-39 | 9Dh x 5 spears | 1 / 2 |
+
+Prompts (QUIT (Y/N)?, GAME PAUSED - PRESS ANY KEY, SOUND EFFECTS ON/OFF) are
+ClearStatusLine + DrawTextCentered(1, 25, ...). Level names: ShowLevelTitle (1854:06A5) picks one
+of four 20-name tables by comparing the base file name with 'ptomb1'..'ptomb4' and prints it with
+DrawTextCentered(2, 12, name) inside StartLevel's frame. Game over: menu font, colour 2,
+DrawTextAt(12, 12, "G A M E   O V E R"), then the big frame and Delay(36).
+
+The port's `text.c` emulates the BIOS cell output and ports these routines. `gamedata.c` reads
+the five fonts and this volume's level names from the EXE by pattern. `font8x8.c` is the port's
+own original font for 20h-7Eh (see `gfx/fonts/port_font.png` after running the font sheet
+script, or the ASCII art in the source).
+
 ## Sound effects
 
 Everything goes through Crt `Sound(hz)` / `NoSound` (PC speaker, PIT channel 2). Crt ignores
@@ -431,7 +486,5 @@ vertical hazards, elevators and bats moving (levels 2, 3, 5, 9). On level 16, a 
 right-hand walker (+250) and the left one kills the player. Freeze and the dart traps are ported
 but haven't been exercised in a scripted run yet.
 
-Not done yet: the status bar text (BIOS font; shown in the window title),
-level names, the menus, save/restore, high scores, the joystick, the volume ending, and
-StartLevel's calls 1854:114F / 10A3. The glint off-by-one (entry 0 at (0, 0)) is kept on
-purpose.
+Not done yet: the title screen and menus, save/restore, high scores, the joystick and the
+volume ending (1854:4E01). The glint off-by-one (entry 0 at (0, 0)) is kept on purpose.

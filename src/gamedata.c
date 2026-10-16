@@ -136,6 +136,76 @@ static int find_levels(gamedata_t *g, char *err, size_t errlen)
     return 0;
 }
 
+/* The five font-select routines all end with
+ *   mov ax,OFFSET / mov dx,ax / xor ax,ax / push ax / mov di,7Ch / pop es / mov es:[di],dx
+ * (the INT 1Fh vector). Their order in the code is FRAME, GAME, MENU, TITLE, EXTRA. */
+static int find_fonts(gamedata_t *g)
+{
+    static const uint8_t tail[] = {0x8B, 0xD0, 0x31, 0xC0, 0x50, 0xBF, 0x7C, 0x00, 0x07, 0x26, 0x89, 0x15};
+    int n = 0;
+    for (size_t i = 0; i + 3 + sizeof tail <= g->image_len && n < 5; i++) {
+        if (g->image[i] != 0xB8 || memcmp(g->image + i + 3, tail, sizeof tail) != 0)
+            continue;
+        const unsigned off = rd16(g->image + i + 1);
+        for (size_t b = 0; b < 128 * 8; b++) /* the last table runs past the initialized data */
+            g->fonts[n][b] = off + b < g->ds_len ? g->ds[off + b] : 0;
+        n++;
+    }
+    return n == 5 ? 0 : -1;
+}
+
+/* ShowLevelTitle (1854:06A5) has one DrawTextCentered(2, 12, NAME) per level, 20 per volume
+ * in volume order: mov ax,2 / push ax / mov ax,0Ch / push ax / mov di,NAME / push cs /
+ * push di / push cs / call DrawTextCentered. The names live in that unit's code segment, which
+ * is found from a far call to the same DrawTextCentered elsewhere. */
+static void find_level_names(gamedata_t *g)
+{
+    const uint8_t *img = g->image;
+    static const uint8_t pat[] = {0xB8, 0x02, 0x00, 0x50, 0xB8, 0x0C, 0x00, 0x50, 0xBF};
+    unsigned offs[4 * MAX_LEVELS];
+    int n = 0;
+    size_t target = 0;
+    for (size_t i = 0; i + 17 <= g->image_len && n < 4 * MAX_LEVELS; i++) {
+        if (memcmp(img + i, pat, sizeof pat) != 0 || img[i + 11] != 0x0E || img[i + 12] != 0x57 ||
+            img[i + 13] != 0x0E || img[i + 14] != 0xE8)
+            continue;
+        int rel = (int)rd16(img + i + 15);
+        if (rel >= 0x8000)
+            rel -= 0x10000;
+        if (n == 0)
+            target = (size_t)((long)i + 17 + rel);
+        offs[n++] = rd16(img + i + 9);
+    }
+    if (n < 4 * MAX_LEVELS)
+        return;
+
+    /* the segment: find "callf SEG:OFF" with SEG*16 + OFF == target */
+    long cs = -1;
+    for (size_t i = 0; i + 5 <= g->image_len && cs < 0; i++)
+        if (img[i] == 0x9A && rd16(img + i + 3) * 16u + rd16(img + i + 1) == target)
+            cs = (long)rd16(img + i + 3) * 16;
+    if (cs < 0)
+        return;
+
+    /* which volume: main stores 'ptombN' as the base file name */
+    g->volume = 1;
+    for (size_t i = g->entry > 0x200 ? g->entry - 0x200 : 0; i + 7 <= g->entry + 0x100 && i + 7 <= g->image_len; i++)
+        if (img[i] == 6 && memcmp(img + i + 1, "ptomb", 5) == 0 && img[i + 6] >= '1' && img[i + 6] <= '4') {
+            g->volume = img[i + 6] - '0';
+            break;
+        }
+
+    for (int l = 0; l < MAX_LEVELS; l++) {
+        const size_t p = (size_t)cs + offs[(g->volume - 1) * MAX_LEVELS + l];
+        if (p >= g->image_len)
+            continue;
+        const unsigned len = img[p] < 40 ? img[p] : 40;
+        for (unsigned c = 0; c < len && p + 1 + c < g->image_len; c++)
+            g->level_names[l][c] = (char)img[p + 1 + c];
+        g->level_names[l][len] = '\0';
+    }
+}
+
 int gamedata_load(gamedata_t *g, const char *path, char *err, size_t errlen)
 {
     memset(g, 0, sizeof *g);
@@ -191,6 +261,12 @@ int gamedata_load(gamedata_t *g, const char *path, char *err, size_t errlen)
         gamedata_free(g);
         return -1;
     }
+    if (find_fonts(g) != 0) {
+        snprintf(err, errlen, "%s: can't locate the game's fonts", path);
+        gamedata_free(g);
+        return -1;
+    }
+    find_level_names(g); /* optional: titles are just left blank if this fails */
     return 0;
 }
 

@@ -6,6 +6,7 @@
 #include "graph3.h"
 #include "platform.h"
 #include "sound.h"
+#include "text.h"
 #include "timer.h"
 #include "tp.h"
 
@@ -68,8 +69,7 @@ static void add_score(double points)
     G.score += points;
 }
 
-/* DrawStatusBar (1000:0671): the bonuses it awards are game logic and are ported; the text
- * goes to the window title until the port has a font. */
+/* DrawStatusBar (1000:0671): row 25. Icons and digits come from the in-game font. */
 static void draw_status_bar(void)
 {
     if (G.treasure == 100) {
@@ -78,6 +78,8 @@ static void draw_status_bar(void)
             G.lives++;
         else
             add_score(50000);
+        text_gotoxy(23, 25);
+        text_write("  "); /* clear the old count */
         G.treasure = 0;
         G.saved_treasure = 0;
     }
@@ -87,12 +89,33 @@ static void draw_status_bar(void)
         G.t_count = 0;
         G.saved_t_count = 0;
     }
-    char s[160];
-    snprintf(s, sizeof s, "Level %d  Score %.0f  Lives %d  Spears %d  Treasure %d  T %d%s%s%s%s",
-             G.level, G.score, G.lives, G.spears, G.treasure, G.t_count,
-             G.key_cyan ? "  [cyan key]" : "", G.key_magenta ? "  [magenta key]" : "",
-             G.frozen ? "  FROZEN" : "", G.cheat ? "  (cheat)" : "");
-    plat_status(s);
+    text_color(2);
+    text_draw_number(G.score, 1, 25);
+    for (int i = 1; i <= 5; i++) { /* lives: 9Ch, bright for each one you have */
+        text_gotoxy(i + 8, 25);
+        text_color(G.lives < i ? 2 : 1);
+        text_putc(0x9C);
+    }
+    text_color(G.key_magenta ? 2 : 0); /* keys: drawn in colour 0 (invisible) when not held */
+    text_draw_at(17, 25, "\x9F");
+    text_color(G.key_cyan ? 3 : 0);
+    text_draw_at(18, 25, "\x9F");
+    text_color(3);
+    text_draw_at(21, 25, "\x9E"); /* treasure */
+    text_color(2);
+    text_draw_at(22, 25, "x");
+    text_draw_number(G.treasure, 23, 25);
+    for (int i = 1; i <= 5; i++) { /* T collectibles: A0h */
+        text_gotoxy(i + 26, 25);
+        text_color(G.t_count < i ? 2 : 1);
+        text_putc(0xA0);
+    }
+    for (int i = 1; i <= 5; i++) { /* spears: 9Dh */
+        text_gotoxy(i + 34, 25);
+        text_color(G.spears < i ? 2 : 1);
+        text_putc(0x9D);
+    }
+    text_color(1);
 }
 
 /* 1854:1017 FlushKeyboard */
@@ -342,15 +365,22 @@ static void kill_player(void);
 /* ------------------------------------------------------------------------------------------ */
 /* Dying, treasure, level changes                                                             */
 
+/* KillPlayer's game-over branch (after 1000:3336, whose high score entry isn't ported). The
+ * volume-complete case (1854:4E01) isn't decoded yet and reuses this screen with its own text. */
 static void game_over_screen(const char *why)
 {
-    /* KillPlayer's game-over branch / 1000:3336 (high score entry not ported) */
-    g3_graph_color_mode();
     G.quit = true;
     G.game_over = true;
-    plat_message(why);
+    g3_graph_color_mode();
+    text_select_font(G.data, FONT_MENU);
+    text_color(2);
+    if (strcmp(why, "GAME OVER") == 0)
+        text_draw_at(12, 12, "G A M E   O V E R");
+    else
+        text_draw_centered(2, 12, why);
+    text_draw_frame(G.data, 1, 2, 2, 38, 24);
+    plat_status(why);
     plat_delay(36);
-    plat_message("");
 }
 
 /* 1000:34C3 */
@@ -930,12 +960,14 @@ static bool is_fire_key(int c)
     return c && strchr(",./<>?BCFMNVXZbcfmnvxz", c) != NULL;
 }
 
+/* A message on the status line until a key is pressed (the key is left for GameTick). */
 static void wait_any_key(const char *msg)
 {
-    plat_message(msg);
+    text_clear_status_line();
+    text_draw_centered(1, 25, msg);
     while (!plat_key_pressed() && !plat_quitting())
         plat_poll();
-    plat_message("");
+    text_clear_status_line();
     draw_status_bar();
 }
 
@@ -998,11 +1030,12 @@ void game_tick(void)
         if (G.last_key == ' ' && !G.jumping)
             player_jump();
         if (upcase(G.last_key) == 'Q' || G.last_key == 27) {
-            plat_message("QUIT (Y/N)?");
+            text_clear_status_line();
+            text_draw_centered(1, 25, "QUIT (Y/N)?");
             G.last_key = plat_read_key();
             if (upcase(G.last_key) == 'Y')
                 G.quit = true;
-            plat_message("");
+            text_clear_status_line();
             draw_status_bar();
             G.last_key = 'w';
         }
@@ -1060,23 +1093,30 @@ void game_new(const gamedata_t *data, int level)
     flush_keyboard();
 }
 
-/* ShowLevelTitle (1854:06A5): the level name, then a short pause (or until a key). */
+/* ShowLevelTitle (1854:06A5): the level's name in the frame StartLevel drew, then a pause of
+ * 48 - level ticks (or until a key). */
 static void show_level_title(int level)
 {
-    char s[64];
-    snprintf(s, sizeof s, "LEVEL %d", level);
-    plat_message(s);
+    if (level >= 1 && level <= MAX_LEVELS)
+        text_draw_centered(2, 12, G.data->level_names[level - 1]);
     flush_keyboard();
     for (int n = level; n < 0x30 && !plat_key_pressed() && !plat_quitting(); n++)
         plat_delay(1);
     flush_keyboard();
-    plat_message("");
     g3_graph_color_mode();
 }
 
 void game_start_level(int level)
 {
     g3_graph_color_mode();
+    text_draw_frame(G.data, 3, 5, 10, 35, 14);
+    text_select_font(G.data, FONT_GAME); /* 1854:10A3 */
+    if (level >= 1 && level <= MAX_LEVELS) {
+        char title[80];
+        snprintf(title, sizeof title, "Volume %d, level %d: %s", G.data->volume, level,
+                 G.data->level_names[level - 1]);
+        plat_status(title);
+    }
     show_level_title(level);
     tp_randseed += (uint32_t)tick_total; /* System 2714:095C, probably Randomize */
 
