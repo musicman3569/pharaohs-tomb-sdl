@@ -343,12 +343,7 @@ static void move_shot(void)
         g3_draw(G.shot_x, G.shot_y, G.shot_x + 8, G.shot_y, 1);
 }
 
-/* MoveEnemies (1000:1FA0) isn't ported yet: enemies stay where they spawned. Its first job,
- * clearing the "standing on a platform" flag before GameTick recomputes it, is kept. */
-static void move_enemies(void)
-{
-    G.on_platform = false;
-}
+static void kill_player(void);
 
 /* ------------------------------------------------------------------------------------------ */
 /* Dying, treasure, level changes                                                             */
@@ -647,6 +642,292 @@ static void touch_tile(int x, int y)
 }
 
 /* ------------------------------------------------------------------------------------------ */
+/* MoveEnemies (1000:1FA0)                                                                    */
+
+enum {
+    SET_PLATFORM = 8,    /* 96FA frame 0, type 1 */
+    SET_BLOCK = 9,       /* 9B3E frame 3, type 3 */
+    SET_VHAZARD = 10,    /* 9C76 frame 1 (type 4), 9DAE frame 3 (type 5) */
+    SET_ELEVATOR = 11,   /* A01E frame 3, type 6 */
+    SET_TALL_HAZARD = 12,/* A1F2 frame 2, type 7 */
+    SET_BAT = 18,        /* ACEA frames 0..3, type 8 */
+    SET_SPARKLE = 20,    /* AF5A frames 0..3, enemy death */
+};
+
+/* 1000:1CB0 TouchesPlayer(left, bottom, right, top): is any of eight points on the player's box
+ * inside the rectangle? (The centre point isn't tested.) */
+static bool touches_player(int left, int bottom, int right, int top)
+{
+    static const int pts[8][2] = {
+        {0, -15}, {8, -15}, {15, -15}, {0, -8}, {15, -8}, {0, -1}, {8, -1}, {15, -1},
+    };
+    for (int i = 0; i < 8; i++)
+        if (between(G.px + pts[i][0], left, right) && between(G.py + pts[i][1], top, bottom))
+            return true;
+    return false;
+}
+
+/* 1000:1E47 EnemyBlocked(self, left, right, y): another walker/block in the way on the same row,
+ * no floor or a wall at either probe column, or too close to the screen edge. */
+static bool enemy_blocked(int self, int left, int right, int y)
+{
+    const enemy_t *en = G.lv.enemy;
+    bool blocked = false;
+    for (int j = 1; j <= MAX_ENEMIES; j++) {
+        if (j == self || en[self].y != en[j].y)
+            continue;
+        const int t = en[j].type & 0xFF; /* the set test looks at the low byte only */
+        if (t != 2 && t != 3 && t != 8)  /* the set at CS:1E27 */
+            continue;
+        if (en[j].y == y && (between(left, en[j].x, en[j].x + 15) || between(right, en[j].x, en[j].x + 15)))
+            blocked = true;
+    }
+    if (dot(left, y + 2) == 0 || dot(right, y + 2) == 0 || dot(left, y) != 0 || dot(right, y) != 0 ||
+        dot(left, y - 15) != 0 || dot(right, y - 15) != 0)
+        blocked = true;
+    if (left < 2 || right > 318)
+        blocked = true;
+    return blocked;
+}
+
+/* The spear test shared by types 2 and 8. It looks 8 px ahead of the spear, and the look-ahead
+ * is undone even when no spear is flying, which moves the idle spear's x: harmless, kept. */
+static void spear_test(enemy_t *e)
+{
+    if (G.shot) {
+        G.shot_x += G.shot_left ? -8 : 8;
+        if (between(G.shot_y, e->y - 15, e->y) &&
+            (between(G.shot_x, e->x, e->x + 15) || between(G.shot_x + 8, e->x, e->x + 15))) {
+            G.shot = false;
+            G.shot_x += G.shot_left ? 8 : -8;
+            g3_draw(G.shot_x, G.shot_y, G.shot_x + 8, G.shot_y, 0);
+            add_score(250);
+            sfx("kill"); /* 1854:5900 */
+            for (int f = 1; f <= 4; f++) {
+                pic(SET_SPARKLE, f - 1, e->x, e->y);
+                plat_delay(1);
+            }
+            blank(e->x, e->y);
+            e->free = true;
+            e->x = -32;
+            draw_status_bar();
+        }
+    }
+    G.shot_x += G.shot_left ? 8 : -8;
+}
+
+/* 1854:58A7 */
+static void dart_sound(void)
+{
+    if (G.sound_on) {
+        plat_sound(500);
+        plat_delay(1);
+        plat_nosound();
+    }
+}
+
+static bool player_x_overlaps(const enemy_t *e)
+{
+    return between(G.px, e->x, e->x + 15) || between(G.px + 15, e->x, e->x + 15);
+}
+
+static void move_enemies(void)
+{
+    G.on_platform = false;
+    for (int i = 1; i <= MAX_ENEMIES; i++) {
+        enemy_t *e = &G.lv.enemy[i];
+        const int nx = e->dx ? e->x + e->speed * e->dx : e->x;
+        const int ny = e->dy ? e->y + e->speed * e->dy : e->y;
+        if (e->free) { /* free slots run as type 1, parked off screen */
+            e->x = e->y = -32;
+            e->type = 1;
+        }
+        if (G.frozen && ++G.freeze_count > 3000) /* counts once per slot per pass */
+            G.frozen = false;
+
+        switch (e->type) {
+        case 1: /* horizontal moving platform */
+            if ((between(G.py, ny - 15, ny) || between(G.py - 15, ny - 15, ny)) &&
+                (between(nx, G.px, G.px + 15) || between(nx + 15, G.px, G.px + 15)))
+                e->dx = -e->dx;
+            else if (dot(nx - 2, ny - 15) == 0 && dot(nx + 17, ny - 15) == 0)
+                e->x += e->speed * e->dx;
+            else
+                e->dx = -e->dx;
+            pic(SET_PLATFORM, 0, e->x, e->y);
+            if (player_x_overlaps(e) && e->y - 16 == G.py) { /* carry the player */
+                G.on_platform = true;
+                const int m = e->speed * e->dx;
+                if (dot(G.px - 2 + m, G.py) == 0 && dot(G.px + 17 + m, G.py) == 0)
+                    G.px += m;
+                else
+                    G.px -= m;
+                draw_player();
+            }
+            break;
+
+        case 2: /* walker: this level's monster */
+            spear_test(e);
+            if (touches_player(e->x + 2, e->y, e->x + 13, e->y - 15))
+                kill_player();
+            if (!G.frozen) {
+                if (!enemy_blocked(i, e->x - 4, e->x + 18, e->y)) {
+                    e->x += e->speed * e->dx;
+                    anim_inc(&e->frame);
+                } else {
+                    e->dx = -e->dx;
+                    e->x += e->speed * e->dx;
+                }
+                level_draw_monster(G.data, G.level, e->frame, e->x, e->y);
+            }
+            break;
+
+        case 3: { /* pushable block: slides 2 px when the player is beside it, facing it */
+            const bool beside = G.facing ? between(G.px, e->x, e->x + 18)
+                                         : between(G.px + 18, e->x, e->x + 15);
+            if (beside && e->y == G.py) {
+                const int step = G.facing ? -2 : 2, edge = G.facing ? 14 : 0;
+                if (!enemy_blocked(i, nx - 8, nx + 22, e->y)) {
+                    g3_draw(e->x + edge, e->y, e->x + edge, e->y - 15, 0);
+                    g3_draw(e->x + edge + 1, e->y, e->x + edge + 1, e->y - 15, 0);
+                    e->x += step;
+                    if (G.sound_on)
+                        plat_sound(tp_random(200));
+                    plat_delay(0);
+                    plat_nosound();
+                    pic(SET_BLOCK, 3, e->x, e->y);
+                }
+            }
+            break;
+        }
+
+        case 4: case 5: /* vertical bouncing hazards */
+            if (touches_player(e->x, e->y + 2, e->x + 15, e->y - 15))
+                kill_player();
+            if (!G.frozen) {
+                if (dot(e->x + 8, ny + 1) == 0 && dot(e->x, ny - 16) == 0) {
+                    if (e->y - 13 > -1)
+                        e->y += e->speed * e->dy;
+                } else {
+                    e->dy = -e->dy;
+                    e->y -= 1;
+                }
+                pic(SET_VHAZARD, e->type == 4 ? 1 : 3, e->x, e->y);
+            }
+            break;
+
+        case 6: /* elevator */
+            if (player_x_overlaps(e) && between(e->y + 2, G.py - 16, G.py) && e->dy == 1)
+                kill_player(); /* crushed from above */
+            if (!G.frozen) {
+                if (dot(nx, ny + 1) == 0 && ny > 36) {
+                    e->y += e->speed * e->dy;
+                    pic(SET_ELEVATOR, 3, e->x, e->y);
+                    if (player_x_overlaps(e) && between(G.py, e->y - 16, e->y)) {
+                        G.on_platform = true;
+                        G.py += e->speed * e->dy;
+                        draw_player();
+                    }
+                } else {
+                    e->dy = -e->dy;
+                    if (G.on_platform && player_x_overlaps(e) && between(G.py, e->y - 16, e->y))
+                        G.py = e->y - 17;
+                    draw_player();
+                }
+            }
+            break;
+
+        case 7: /* tall vertical hazard */
+            if (touches_player(e->x, e->y + 2, e->x + 15, e->y - 17))
+                kill_player();
+            if (!G.frozen) {
+                if (dot(e->x, ny + 1) == 0 && dot(e->x, ny - 18) == 0) {
+                    e->y += e->speed * e->dy;
+                    pic(SET_TALL_HAZARD, 2, e->x, e->y);
+                } else {
+                    e->dy = -e->dy;
+                }
+            }
+            break;
+
+        case 8: /* bat: crawls along a ceiling */
+            spear_test(e);
+            if (touches_player(e->x + 2, e->y, e->x + 13, e->y - 14))
+                kill_player();
+            if (!G.frozen) {
+                if (dot(nx, ny - 17) != 0 && dot(nx + 15, ny - 17) != 0 && dot(nx - 2, ny) == 0 &&
+                    dot(nx + 17, ny) == 0 && nx > 2 && nx < 318) {
+                    e->x += e->speed * e->dx;
+                    anim_inc(&e->frame);
+                } else {
+                    e->dx = -e->dx;
+                    e->x += e->speed * e->dx;
+                }
+                pic(SET_BAT, e->frame - 1, e->x, e->y);
+            }
+            break;
+
+        case 9: /* dart trap firing right */
+            if (!G.frozen && between(G.py, e->y - 15, e->y + 1) && !G.dart_r) {
+                dart_sound();
+                G.dart_r = true;
+                G.dart_rx = e->x + 16;
+                G.dart_ry = e->y - 7;
+            }
+            if (tick_counter[TICK_7F72] != 0) {
+                tick_counter[TICK_7F72] = 0;
+                if (G.dart_r) {
+                    g3_plot(G.dart_rx, G.dart_ry, 0);
+                    G.dart_rx += 4;
+                    g3_plot(G.dart_rx, G.dart_ry, 1);
+                    if (between(G.dart_rx, G.px - 4, G.px + 19) && between(G.dart_ry, G.py - 17, G.py)) {
+                        g3_plot(G.dart_rx, G.dart_ry, 0);
+                        G.dart_r = false;
+                        kill_player();
+                    } else if (G.dart_rx > 320 || dot(G.dart_rx + 4, G.dart_ry) != 0) {
+                        g3_plot(G.dart_rx, G.dart_ry, 0);
+                        G.dart_r = false;
+                        G.dart_ry = -32;
+                    }
+                }
+            }
+            break;
+
+        case 10: { /* dart trap firing left */
+            int *ly = &G.lv.glint_x[0]; /* DS:7606 */
+            if (!G.frozen && between(G.py, e->y - 15, e->y + 1) && !G.dart_l) {
+                dart_sound();
+                G.dart_l = true;
+                G.dart_lx = e->x - 1;
+                *ly = e->y - 7;
+            }
+            if (tick_counter[TICK_7F70] != 0) {
+                tick_counter[TICK_7F70] = 0;
+                if (G.dart_l) {
+                    g3_plot(G.dart_lx, *ly, 0);
+                    G.dart_lx -= 4;
+                    g3_plot(G.dart_lx, *ly, 1);
+                    if (between(G.dart_lx, G.px - 4, G.px + 19) && between(*ly, G.py - 17, G.py)) {
+                        g3_plot(G.dart_lx, *ly, 0);
+                        G.dart_l = false;
+                        kill_player();
+                    } else if (G.dart_lx < 0 || dot(G.dart_lx - 4, *ly) != 0) {
+                        g3_plot(G.dart_lx, *ly, 0);
+                        G.dart_l = false;
+                        *ly = -32;
+                    }
+                }
+            }
+            break;
+        }
+
+        default:
+            break;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------------------------------ */
 /* GameTick                                                                                   */
 
 /* Fire keys: the set at CS:4F49, the bottom keyboard row plus F. */
@@ -818,6 +1099,8 @@ void game_start_level(int level)
     G.frame = 1;
     G.facing = 0;
     G.shot = G.walk_blocked = G.jumping = G.frozen = G.falling = G.pushed = false;
+    G.dart_r = G.dart_l = false;
+    G.dart_rx = G.dart_ry = G.dart_lx = 0; /* the left dart's y (7606) is zeroed by level_start */
     G.glint_on = false;
     G.level = level;
     G.wind_right = level == 10;

@@ -185,12 +185,48 @@ branch per type. Movement per step is `speed * dx` / `speed * dy` pixels.
 | 5 | `m` (1), `M` (2) | 10/3 | Same as type 4 with a different sprite. | yes | no |
 | 6 | `n`, starts going up | 11/3 | **Elevator.** Vertical platform that carries the player, reverses at obstacles or y <= 36. Crushes a player beneath it while moving down. | when crushing | no |
 | 7 | `q`, starts going up | 12/2 | **Vertical hazard**, taller hit box than 4/5. Drawn twice at load: at y and 2 px higher, and spawned at y-2. | yes | no |
-| 8 | `B` | set 18, animated | **Bird/bat walker.** Like type 2, but also turns at ledges (needs floor under it) and stays within x = 3..317. | yes | yes |
+| 8 | `B` | set 18, animated | **Bat that crawls along a ceiling.** Moves while there are pixels at `y-17` above both its edges (a ceiling) and nothing 2 px ahead at `y`, within x = 3..317; otherwise turns. | yes | yes |
 | 9 | `P` | 15/0 | **Dart trap, fires right.** When the player is on its row it shoots a dart (a plotted dot) moving +4 px per tick of `[7F72]` until it hits a wall, the screen edge, or the player. | dart kills | no |
 | 10 | `O` | 15/1 | Dart trap, fires left (`[7F70]`, -4 px). | dart kills | no |
 
 - `[7968]` freezes all enemies. It's set by the `F` freeze pickup (tile code 15), counts up in
-  `[75EA]`, and clears after 3000 steps.
+  `[75EA]`, and clears after 3000 steps. The count goes up once per slot per MoveEnemies pass,
+  so 10 per tick of `[7F6C]`: about 16.5 seconds. Frozen enemies stop moving and aren't
+  redrawn, but walkers and hazards still kill on touch, and pushable blocks still move.
+
+### MoveEnemies details (1000:1FA0, from the disassembly)
+
+- Each pass first clears "on a platform" `[796D]`, then for each slot computes
+  `nx = x + speed*dx`, `ny = y + speed*dy` (just x / y when dx / dy is 0).
+- **Free slots run as type 1** parked at (-32, -32); harmless, but kept.
+- **TouchesPlayer(left, bottom, right, top)** (1000:1CB0) is true if any of the player's points
+  `(x|x+8|x+15, y-15)`, `(x|x+15, y-8)`, `(x|x+8|x+15, y-1)` is inside the rectangle. Hit boxes:
+  walker `(x+2, y, x+13, y-15)`, vertical hazards `(x, y+2, x+15, y-15)`, tall hazard
+  `(x, y+2, x+15, y-17)`, bat `(x+2, y, x+13, y-14)`.
+- **EnemyBlocked(self, left, right, y)** (1000:1E47): blocked by a type 2/3/8 enemy (set at
+  CS:1E27) on the same row covering either probe column, by no floor at `y+2` or a wall at `y`
+  or `y-15` under either column, or by `left < 2` / `right > 318`. Walkers probe `x-4` and
+  `x+18`; pushable blocks `x-8` and `x+22`.
+- **Spear vs walker/bat**: the spear is tested 8 px ahead of where it is (`x+-8`), and that
+  look-ahead is undone even when no spear is flying. A hit erases the spear, scores 250, plays
+  set 20 for 4 frames with Delay(1), blanks the enemy and frees the slot.
+- Platform (1): reverses when the player overlaps its next position or there's a pixel at
+  `(nx-2 | nx+17, ny-15)`. A player standing on it (`y - 16 == player y`) moves with it unless
+  a wall pixel is in the way, in which case the player is moved the other way.
+- Pushable block (3): pushed 2 px when the player stands beside it on its row, facing it
+  (`Between(px, x, x+18)` facing left, `Between(px+18, x, x+15)` facing right). It erases its two
+  trailing columns and clicks the speaker at `Random(200)` Hz. Freeze doesn't stop it.
+- Vertical hazards (4, 5): move while `(x+8, ny+1)` and `(x, ny-16)` are black (and not above
+  y = 12), else reverse and nudge up 1 px. Tall hazard (7): `(x, ny+1)` and `(x, ny-18)`.
+- Elevator (6): moves while `(nx, ny+1)` is black and `ny > 36`, carrying a player inside its
+  box, else reverses and snaps a rider to `y-17`. It kills a player in its columns whose box
+  contains its bottom+2 while it's moving down. It leaves a vertical line below as it rises
+  (its bottom row isn't black); unverified against the original.
+- Dart traps (9, 10): one dart per direction for the whole level ([796F]/[7600]/[7602] right,
+  [7970]/[7604]/[7606] left). Armed when the player's y is within the trap's `y-15..y+1`. Fired
+  from `x+16` (right) or `x-1` (left) at `y-7`, plotted as a dot moving 4 px per tick of
+  `[7F72]` / `[7F70]`. It kills inside `px-4..px+19`, `py-17..py`, and stops past the screen edge
+  or at a non-black pixel 4 px ahead. **DS:7606 (left dart y) is also glint entry 0's x.**
 - `c` tiles aren't enemies. They go into a spawn-point list at `7606 + n*6`; GameTick
   occasionally (5 in 100) plays a set-21 "glint" animation on a random one.
 
@@ -344,8 +380,12 @@ restored to its level-start value) and changing level.
   their values when the level began (score and lives stay).
 - `ShowLevelTitle` (1854:06A5) prints the level's name and waits `48 - level` ticks or a key.
 
-Not done yet: MoveEnemies (enemies are drawn but static; only its "clear the on-platform flag"
-step runs), sound effects (1854:58D2 / 592F / 595F / 598F / 15F0 are silent; direct
+Enemies (MoveEnemies) are ported too. Scripted runs on volume 1 show platforms, walkers,
+vertical hazards, elevators and bats moving (levels 2, 3, 5, 9). On level 16, a spear kills the
+right-hand walker (+250) and the left one kills the player. Freeze and the dart traps are ported
+but haven't been exercised in a scripted run yet.
+
+Not done yet: sound effects (1854:58D2 / 592F / 595F / 598F / 5900 / 15F0 are silent; direct
 Sound/NoSound calls are real), the status bar text (BIOS font; shown in the window title),
 level names, the menus, save/restore, high scores, the joystick, the volume ending, and
 StartLevel's calls 1854:114F / 10A3. The glint off-by-one (entry 0 at (0, 0)) is kept on

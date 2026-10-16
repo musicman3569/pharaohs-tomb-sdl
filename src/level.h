@@ -34,6 +34,9 @@ typedef struct {
  * enemies, and draw the line above the status bar (whose text isn't drawn yet). */
 void level_start(level_t *lv, const gamedata_t *g, int level);
 
+/* DrawLevelMonster (1854:59BE): this level's 's'/'S' monster, animation frame 1..4. */
+void level_draw_monster(const gamedata_t *g, int level, int frame, int x, int y);
+
 /* GetPic of a blank 16x16 area (the game's buffer at B6AA), used to erase tiles. */
 const uint8_t *level_blank_pic(void);
 

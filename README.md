@@ -23,9 +23,10 @@ Graph3-style 320x200 CGA framebuffer.
 What works so far: levels are drawn exactly as the game's StartLevel does, and **the player is
 playable**. You can walk, jump, fall, throw spears, and pick up or trigger every tile type
 (keys, locks, exit doors, treasure, hidden bricks, switches, spikes, the exit), with lives,
-score and level changes. Not yet: enemies moving (they're drawn but stand still), sound
-effects (direct speaker beeps work), the status bar text (shown in the window title instead),
-the menus, saving, and the joystick.
+score and level changes, and **all ten enemy types move and fight**: platforms, walkers you
+can spear, pushable blocks, vertical hazards, elevators, ceiling bats, dart traps, plus the
+freeze pickup. Not yet: sound effects (direct speaker beeps work), the status bar text (shown in
+the window title instead), the menus, saving, and the joystick.
 
 ### Build (Windows, MSYS2 mingw64)
 

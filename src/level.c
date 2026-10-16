@@ -86,8 +86,16 @@ static const signed char level_monster_set[MAX_LEVELS + 1] = {
     -1, 31, 27, 24, 25, 26, 23, 28, 29, 30, 39, 32, 33, 31, 34, 19, 35, 36, 37, 38, 22,
 };
 
+static void put_sprite(const gamedata_t *g, int set, int frame, int x, int y);
+
 /* GetPic of a blank 16x16 area, taken by ResetGameState (buffer at B6AA). */
 static uint8_t blank_pic[6 + 16 * 4] = {2, 0, 16, 0, 16, 0};
+
+void level_draw_monster(const gamedata_t *g, int level, int frame, int x, int y)
+{
+    if (level >= 1 && level <= MAX_LEVELS)
+        put_sprite(g, level_monster_set[level], frame - 1, x, y);
+}
 
 const uint8_t *level_blank_pic(void)
 {
@@ -142,8 +150,8 @@ static void draw_level_row(level_t *lv, const gamedata_t *g, int row, const char
             put_sprite(g, t->set, t->frame, x, y);
         if (t->flags & T_DRAW_UP2)
             put_sprite(g, t->set, t->frame, x, y - 2);
-        if ((t->flags & T_MONSTER) && lv->level >= 1 && lv->level <= MAX_LEVELS)
-            put_sprite(g, level_monster_set[lv->level], 0, x, y);
+        if (t->flags & T_MONSTER)
+            level_draw_monster(g, lv->level, 1, x, y);
 
         if (t->map)
             lv->map[row][col] = t->map;
@@ -168,9 +176,12 @@ void level_start(level_t *lv, const gamedata_t *g, int level)
 {
     memset(lv, 0, sizeof *lv);
     lv->level = level;
+    /* Free slots get the values StartLevel writes (MoveEnemies still runs them, as type 1). */
     for (int i = 1; i <= MAX_ENEMIES; i++) {
-        lv->enemy[i].free = true;
-        lv->enemy[i].x = lv->enemy[i].y = -32;
+        enemy_t *e = &lv->enemy[i];
+        e->free = true;
+        e->frame = e->speed = e->dx = e->dy = -1;
+        e->x = e->y = e->type = -32;
     }
 
     g3_graph_color_mode();

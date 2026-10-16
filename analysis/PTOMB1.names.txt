@@ -98,13 +98,13 @@
 20e3:0068 Joy_Button2
 
 # --- Enemy helpers (from MoveEnemies) ---
-1000:1c87 Between_guess             # Pascal (v, lo, hi): lo <= v <= hi
-1000:1cb0 TouchesPlayer_guess       # box overlap with the player
+1000:1c87 Between                   # Pascal (v, lo, hi): lo <= v <= hi
+1000:1cb0 TouchesPlayer             # (left, bottom, right, top) any of 8 player-box points inside
 1000:34c3 KillPlayer                # death anim (set 19), lives-1 (refunded if cheat [795D]); <0 -> game over
-1000:1e47 EnemyBlocked_guess        # path ahead blocked (walls / other enemies)
-1000:1c60 AnimateEnemy_guess        # advance frame index (slot +0) 1..4
+1000:1e47 EnemyBlocked              # (self, left, right, y) other type 2/3/8, no floor, wall, screen edge
+1000:1c60 AnimFrameInc              # (var frame) 1..4 wrapping; used for enemies and the player
 1000:35a2 DrawPlayer_guess
-1854:5900 AwardKillScore_guess      # after shooting a type 2/8 enemy
+1854:5900 SfxEnemyKilled            # sound only (calls 1854:15F0); the 250 points are added by MoveEnemies
 1f47:035b Graph3_Draw               # line (x1, y1, x2, y2, color); the player's shot is a line
 1f47:03ed Graph3_Plot_guess         # used to draw/erase arrow-trap darts
 
@@ -132,3 +132,4 @@
 1854:06a5 ShowLevelTitle            # (level) level name, wait 48-level ticks or a key
 1854:1017 FlushKeyboard
 1000:1c1f SnapshotForSave           # copies level/score/counters for the S key
+1854:58a7 SfxDart                   # Sound(500), Delay(1), NoSound

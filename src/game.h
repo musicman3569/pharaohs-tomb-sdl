@@ -60,6 +60,13 @@ typedef struct {
     bool shot_left;        /* [7960] */
     int shot_x, shot_y;    /* [75DC] [75DE] */
 
+    /* Dart traps: one dart per direction for the whole level. The left dart's y is DS:7606,
+     * which is also glint entry 0's x, so it's stored there (lv.glint_x[0]). */
+    bool dart_r;           /* [796F] */
+    int dart_rx, dart_ry;  /* [7600] [7602] */
+    bool dart_l;           /* [7970] */
+    int dart_lx;           /* [7604] */
+
     /* Gem glint animation */
     bool glint_on;         /* [7864] */
     int glint_frame;       /* [7866] */
