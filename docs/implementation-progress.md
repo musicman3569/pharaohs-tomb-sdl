@@ -164,6 +164,8 @@ Assumed / unverified (check in DOSBox when possible):
    blocks movement (e.g. interrupts a jump mid-flight) and other times not.
 2. Higher frame rate and smoother movement.
 3. Fullscreen mode
+4. Menu mouse support and/or arrow/controller movement highlighting of options instead of letters/shortcuts
+5. Graphics remaster from 3-color CGA to 256 colors
 
 ## How to work here (lessons from this session)
 
