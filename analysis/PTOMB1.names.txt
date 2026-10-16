@@ -1,0 +1,95 @@
+# Function names for unpacked/PTOMB1.EXE (Ghidra load base 1000).
+# Apply with: python tools/ghidra_rename.py analysis/PTOMB1.names.txt
+# Names ending in _guess are inferred from a single call site and need confirming.
+
+# --- Main program (segment 1000) ---
+1000:8473 main
+1000:007e InstallKeyboardISR        # GetIntVec(9) -> 7990, SetIntVec(9, 1000:0000)
+1000:00a2 RestoreKeyboardISR
+1000:08d7 ResetGameState
+1000:6227 TitleScreen
+1000:5a9f MainMenu
+1000:53b7 PlayGame
+1000:4af1 RestoreSavedGame
+1000:5403 ShowHighScores
+1000:57c4 JoystickMenu
+
+# --- Game unit (segment 1854) ---
+1854:0f28 LoadConfig                # PTOMB.CFG, 1 byte -> [8101], default '3'
+1854:662f LoadHighScores            # <name>.HS, 5 records x 0x106 bytes
+1854:6b67 InstallTimerISRAndExitProc # ExitProc -> 1854:6b3c, INT 1Ch -> 1854:6afa
+1854:60c8 ExitTextScreen            # text mode + ordering info, printed at exit
+1854:1e44 ShowOrderingInfo          # arg 0 from Quit, 1 from 'O'
+1854:2a20 ShowInstructions
+1854:3a03 ShowStory
+1854:69d3 ConfigKeyboard
+
+# --- Sprite data units (1F11, 1F2E) ---
+1f11:0000 CopySpriteFrames_A        # copies 4 x 0x9C-byte Graph3 pictures
+1f11:007f InitSprites_A
+1f2e:0000 CopySpriteFrames_B
+1f2e:007f InitSprites_B
+
+# --- Graph3 (1F47) ---
+1f47:002a Graph3_GraphColorMode     # BIOS mode 4, palette 1
+
+# --- Crt (2081) ---
+2081:0000 Crt_Init
+2081:016d Crt_TextMode
+2081:01c2 Crt_ClrScr
+2081:0259 Crt_TextColor
+2081:0273 Crt_TextBackground
+2081:02fa Crt_KeyPressed
+2081:030c Crt_ReadKey
+
+# --- Joystick (20E3) ---
+20e3:0000 Joy_Detect                # reads port 201h, returns bool
+20e3:00e4 Joy_ReadAxis              # arg 0 = X, 1 = Y
+
+# --- Dos (20F5) ---
+20f5:006c Dos_GetIntVec
+20f5:0084 Dos_SetIntVec
+
+# --- System RTL (2714) ---
+2714:0000 System_Init
+2714:00d8 System_Halt
+2714:0207 System_IOResult
+2714:020e System_IOCheck
+2714:0244 System_StackCheck
+2714:025d System_Move
+2714:028f System_StrStore
+2714:0275 System_StrLoad
+2714:0302 System_StrConcat
+2714:0365 System_StrCompare
+2714:08d5 System_Random
+2714:0a7b System_StrInt             # Str(int, s)
+2714:0af7 System_AssignText
+2714:0b67 System_ResetText
+2714:0bc0 System_CloseText
+2714:0e43 System_WriteLn
+2714:0e62 System_ReadLn
+2714:0e88 System_ReadChar
+2714:0f0b System_WriteStr
+2714:0f49 System_Assign
+2714:0f77 System_Reset
+2714:0ff8 System_Close
+2714:102c System_ReadRec
+2714:10fa System_UpCase
+
+# --- In-game loop ---
+1000:4f69 GameTick                  # one frame: enemies, gravity, input, pickups
+1000:7638 StartLevel_guess          # called with level number from PlayGame
+1000:1fa0 MoveEnemies_guess         # runs when timer counter [7f6c] > 0
+1000:4dd4 PlayerJump_guess          # Space / joystick button 1
+1000:4df0 PlayerFire_guess          # joystick button 2 / fire keys, needs [75e2] > 0
+1000:3b2d CheckPointHit_guess       # probed at 9 points around the player box
+1000:5e20 SaveGame_guess            # 'S' in game
+1000:5f3b RestoreGame_guess         # 'R' in game
+1854:1330 ClearStatusLine_guess
+1854:1446 DrawTextRow_guess         # (str, row, color); row 25 = status line
+
+# --- Graph3 / Joystick, confirmed from GameTick ---
+1f47:069c Graph3_PutPic             # (buffer, x, y)
+1f47:0a9e Graph3_GetDotColor        # (x, y) -> color; used for collision!
+20e3:0040 Joy_Button1
+20e3:0068 Joy_Button2
