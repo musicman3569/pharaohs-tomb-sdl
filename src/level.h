@@ -22,6 +22,7 @@ typedef struct {
 typedef struct {
     int level;                                      /* [75D0], 1..20 */
     unsigned char map[LEVEL_ROWS + 1][LEVEL_COLS + 1]; /* tile codes, 1-based like DS:7857 */
+    const uint8_t *tile_pic[LEVEL_ROWS + 1][LEVEL_COLS + 1]; /* port: the sprite drawn there */
     enemy_t enemy[MAX_ENEMIES + 1];                 /* 1-based like the game */
     int spawn_count;                                /* [7F76], counts every spawn attempt */
     int glint_x[MAX_GLINTS + 1], glint_y[MAX_GLINTS + 1]; /* 'c' gems, DS:7606 + n*6 */
@@ -36,6 +37,9 @@ void level_start(level_t *lv, const gamedata_t *g, int level);
 
 /* DrawLevelMonster (1854:59BE): this level's 's'/'S' monster, animation frame 1..4. */
 void level_draw_monster(const gamedata_t *g, int level, int frame, int x, int y);
+
+/* The picture DrawLevelMonster draws, or NULL. */
+const uint8_t *level_monster_pic(const gamedata_t *g, int level, int frame);
 
 /* GetPic of a blank 16x16 area (the game's buffer at B6AA), used to erase tiles. */
 const uint8_t *level_blank_pic(void);

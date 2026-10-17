@@ -140,6 +140,12 @@ default), and **enhanced**, which switches on every enhancement. So far that is:
 - **Pickups don't get in your way** (`gameplay.solid_pickups = off`): in the original, gems,
   keys, spears and the other pickups are solid until you touch them, so some jumps into them
   stop short (about half the jumps into a gem from the side of it). Now you always reach them.
+- **Pixel-accurate hits** (`gameplay.pixel_hits`): enemies, darts and spikes kill you only when
+  their pixels touch the explorer's. The original used rectangles that reach 3-6 pixels past
+  most of the pictures, so you could die with clear space between you and a hazard. Enemies
+  now also come all the way to you instead of turning back off your pixels a few short (in
+  the original a walker coming from the right turned around on your hat and never killed
+  you). Spear hits on monsters keep the original's generous box.
 - **Main menu cursor** (`menu.navigation`): a highlight you move with the arrow keys, the
   d-pad or the mouse, and choose with Enter, Space, A or a click. The letter keys still work.
   Clicks also count as a key on "press any key" screens. (In classic, as in the original,
@@ -163,6 +169,7 @@ joystick = on         ; start with the controller on (the original started with 
 
 [gameplay]
 solid_pickups = on    ; pickups block you until touched, as in the original (off in enhanced)
+pixel_hits = off      ; kill only on touching pixels, not the original's hit boxes (on in enhanced)
 
 [menu]
 navigation = off      ; the main menu cursor (on in enhanced)
@@ -216,6 +223,7 @@ example, `--script "wait 70; down right; wait 18; up right; shot a.png; quit"`.
 | `player X Y` | put the player at X, Y (Y is their bottom row), in a level |
 | `jump` | start a jump from where the player is, even in mid-air |
 | `state` | print the player's position, treasure, score, lives and spears |
+| `enemies` | print the player's facing and frame, and each enemy's type, position and frame |
 | `quit` | close the port |
 
 `KEY` is `left`, `right`, `up`, `down`, `space`, `esc`, `enter`, `pgup`, `pgdn`, `f11` or a single

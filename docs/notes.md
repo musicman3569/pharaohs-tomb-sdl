@@ -675,3 +675,38 @@ as the row below), while PlayerWalk looks 2 px ahead and PlayerJumpStep 1 px abo
 
 The port keeps this in classic. `gameplay.solid_pickups = off` (enhanced) makes the player's
 own checks ignore pixels in a pickup's cell.
+
+## Hit boxes vs pixels
+
+Every death is a rectangle test, not a pixel test: TouchesPlayer's 8 points against the enemy
+boxes above, the dart box `px-4..px+19, py-17..py`, and a TouchTile point anywhere in a code-09
+cell. The boxes cover empty parts of the pictures: the bat's top 7 rows are empty but in its box,
+the hazards' boxes reach 2 px below the picture (4 px below the prongs), and spike art starts
+3 rows into its cell. Measured with `--script` (`state` / `enemies` every tick, the gap between
+the explorer's and the killer's non-black pixels at the hit):
+
+| Case | Classic gap | Why |
+|------|-------------|-----|
+| Walker, volume 1 levels 1 and 9 | 2-5 px | box x+2..x+13 against the 16-px player box |
+| Vertical hazard (`l`), level 6 | 4-5 px | box to y+2 |
+| Spike pit, level 12 | 4 rows | TouchTile cell vs art |
+
+The boxes also make up for movement reading pixels. The enemies' own probes see the player's
+picture: a vertical hazard reverses when `(x+8, ny+1)` hits the explorer's hat, 3 rows short of
+it, and only the y+2 box kills him. A walker turns when its `x-4` / `x+18` probe at `y-15` hits
+the hat crown (columns 5-10): coming from the left the box kills first, but **coming from the
+right it turns around one step early and never kills a player on its own floor**.
+The player's checks see enemies and spikes too, so he can stand on spike tips or a monster's
+head with 2 rows of space.
+
+`gameplay.pixel_hits = on` (enhanced) makes every death a pixel test: the explorer's picture
+(walking frame, or the jump picture in the air; his visible shape even when invisible) touches
+the enemy's current picture, the spike tile drawn in that cell (`level_t.tile_pic`), or a point
+the dart passed through this step, touching meaning overlapping or adjacent, diagonals included.
+For that to be reachable, deadly enemies (types 2, 4, 5, 7, 8), darts and the player stop seeing
+each other: the player's checks ignore pixels inside a deadly enemy's 16x16 picture and in
+spike cells, and those enemies' and the darts' probes ignore the player's 16x16 picture. Platforms,
+elevators, pushable blocks and the spear are unchanged. Measured: every enhanced kill above
+happens at gap 0 or overlap, walkers kill from both sides, and placements where classic's box
+reached into empty space (a walker turning at a wall 3 px away) survive. Classic runs are
+byte-identical to the build before the change (state traces and screenshots).

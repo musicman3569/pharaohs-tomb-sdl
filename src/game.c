@@ -68,14 +68,100 @@ static bool is_pickup(int code)
     }
 }
 
+/* Port enhancement (gameplay.pixel_hits on). The original kills with rectangles (TouchesPlayer,
+ * the dart box, a TouchTile point anywhere in a spike's cell) that reach up to 6 px past the
+ * pictures, so you die without touching anything. With the setting on, a hit is the explorer's
+ * non-black pixels touching the other picture's (overlapping, or next to each other diagonals
+ * included). The pixel checks that move things are adjusted so that they can touch: the
+ * player's ignore dangerous enemies and spike cells, and dangerous enemies' and darts' ignore
+ * the player. Otherwise a hazard turns back off the player's head, and the player stands on
+ * spikes or a monster, a few pixels short of contact, where the old boxes did the killing. */
+
+/* Is the pixel at (x, y) of a picture put at (px, py) non-black? Outside it reads as black. */
+static bool pic_dot(const uint8_t *pic, int px, int py, int x, int y)
+{
+    const int w = pic[2] | pic[3] << 8, h = pic[4] | pic[5] << 8;
+    const int c = x - px, r = py - y; /* r counts up from the bottom row, as stored */
+    if (c < 0 || c >= w || r < 0 || r >= h)
+        return false;
+    return (pic[6 + r * ((w + 3) / 4) + c / 4] >> (6 - 2 * (c % 4)) & 3) != 0;
+}
+
+/* Is a non-black pixel of `pic` (put at px, py) on or next to (x, y)? */
+static bool pic_near(const uint8_t *pic, int px, int py, int x, int y)
+{
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++)
+            if (pic_dot(pic, px, py, x + dx, y + dy))
+                return true;
+    return false;
+}
+
+/* Do two pictures' non-black pixels touch? */
+static bool pics_touch(const uint8_t *a, int ax, int ay, const uint8_t *b, int bx, int by)
+{
+    if (!a || !b)
+        return false;
+    const int aw = a[2] | a[3] << 8, ah = a[4] | a[5] << 8;
+    const int bw = b[2] | b[3] << 8, bh = b[4] | b[5] << 8;
+    if (ax > bx + bw || bx > ax + aw || ay - ah > by || by - bh > ay)
+        return false;
+    for (int r = 0; r < ah; r++)
+        for (int c = 0; c < aw; c++)
+            if (pic_dot(a, ax, ay, ax + c, ay - r) && pic_near(b, bx, by, ax + c, ay - r))
+                return true;
+    return false;
+}
+
+/* The explorer's shape for hits: the jumping picture in the air, else the walking frame. The
+ * invisibility trap only hides him (enemies still kill), so he keeps his visible shape. */
+static const uint8_t *player_hit_pic(void)
+{
+    if (G.jumping)
+        return gamedata_sprite(G.data, G.facing ? SET_JUMP_LEFT : SET_JUMP_RIGHT, 0);
+    return gamedata_sprite(G.data, G.facing ? SET_WALK_LEFT : SET_WALK_RIGHT, G.frame - 1);
+}
+
+/* Enemies that kill on touch: walkers, vertical hazards, the tall hazard and bats. */
+static bool is_deadly(const enemy_t *e)
+{
+    return !e->free && (e->type == 2 || e->type == 4 || e->type == 5 || e->type == 7 || e->type == 8);
+}
+
+/* Is (x, y) inside a deadly enemy's picture? */
+static bool in_deadly_enemy(int x, int y)
+{
+    for (int i = 1; i <= MAX_ENEMIES; i++) {
+        const enemy_t *e = &G.lv.enemy[i];
+        if (is_deadly(e) && x >= e->x && x <= e->x + 15 && y >= e->y - 15 && y <= e->y)
+            return true;
+    }
+    return false;
+}
+
 /* GetDotColor for the player's own movement checks. */
 static int player_dot(int x, int y)
 {
-    if (!settings.solid_pickups && x >= 0 && y >= 0) {
+    if (x >= 0 && y >= 0) {
         const int row = (y + 15) / 16, col = x / 16 + 1; /* the tile drawn over this pixel */
-        if (row >= 1 && row <= LEVEL_ROWS && col <= LEVEL_COLS && is_pickup(G.lv.map[row][col]))
+        if (row >= 1 && row <= LEVEL_ROWS && col <= LEVEL_COLS) {
+            const int code = G.lv.map[row][col];
+            if (!settings.solid_pickups && is_pickup(code))
+                return 0;
+            if (settings.pixel_hits && code == 0x09) /* spikes */
+                return 0;
+        }
+        if (settings.pixel_hits && in_deadly_enemy(x, y))
             return 0;
     }
+    return dot(x, y);
+}
+
+/* GetDotColor for a deadly enemy's or a dart's movement checks. */
+static int enemy_dot(int x, int y)
+{
+    if (settings.pixel_hits && x >= G.px && x <= G.px + 15 && y >= G.py - 15 && y <= G.py)
+        return 0; /* the player's picture */
     return dot(x, y);
 }
 
@@ -599,7 +685,8 @@ static void touch_tile(int x, int y)
         }
         break;
     case 0x09: /* spikes */
-        kill_player();
+        if (!settings.pixel_hits || pics_touch(player_hit_pic(), G.px, G.py, G.lv.tile_pic[row][col], cx, cy))
+            kill_player();
         break;
     case 0x0B: /* hidden trigger: crumble the code-0A bricks */
         crumble_or_build(cell, 0x0A, false);
@@ -732,10 +819,34 @@ static bool touches_player(int left, int bottom, int right, int top)
     return false;
 }
 
-/* 1000:1E47 EnemyBlocked(self, left, right, y): another walker/block in the way on the same row,
- * no floor or a wall at either probe column, or too close to the screen edge. */
-static bool enemy_blocked(int self, int left, int right, int y)
+/* Does enemy `e` (drawn with `pic`) kill the player? TouchesPlayer with its box, or with
+ * gameplay.pixel_hits, the two pictures touching. */
+static bool hits_player(const enemy_t *e, const uint8_t *pic, int left, int bottom, int right, int top)
 {
+    if (settings.pixel_hits)
+        return pics_touch(player_hit_pic(), G.px, G.py, pic, e->x, e->y);
+    return touches_player(left, bottom, right, top);
+}
+
+/* Does a dart at (x, y), having moved from x - step, kill the player? The original's box, or
+ * with gameplay.pixel_hits, the explorer's pixels touching any point it passed. */
+static bool dart_hits(int x, int y, int step)
+{
+    if (!settings.pixel_hits)
+        return between(x, G.px - 4, G.px + 19) && between(y, G.py - 17, G.py);
+    const uint8_t *p = player_hit_pic();
+    for (int i = 0; i < 4; i++)
+        if (p && pic_near(p, G.px, G.py, x - step * i / 4, y))
+            return true;
+    return false;
+}
+
+/* 1000:1E47 EnemyBlocked(self, left, right, y): another walker/block in the way on the same row,
+ * no floor or a wall at either probe column, or too close to the screen edge. A walker's checks
+ * (`deadly`) go through enemy_dot. */
+static bool enemy_blocked(int self, int left, int right, int y, bool deadly)
+{
+    int (*const probe)(int, int) = deadly ? enemy_dot : dot;
     const enemy_t *en = G.lv.enemy;
     bool blocked = false;
     for (int j = 1; j <= MAX_ENEMIES; j++) {
@@ -747,8 +858,8 @@ static bool enemy_blocked(int self, int left, int right, int y)
         if (en[j].y == y && (between(left, en[j].x, en[j].x + 15) || between(right, en[j].x, en[j].x + 15)))
             blocked = true;
     }
-    if (dot(left, y + 2) == 0 || dot(right, y + 2) == 0 || dot(left, y) != 0 || dot(right, y) != 0 ||
-        dot(left, y - 15) != 0 || dot(right, y - 15) != 0)
+    if (probe(left, y + 2) == 0 || probe(right, y + 2) == 0 || probe(left, y) != 0 || probe(right, y) != 0 ||
+        probe(left, y - 15) != 0 || probe(right, y - 15) != 0)
         blocked = true;
     if (left < 2 || right > 318)
         blocked = true;
@@ -833,10 +944,10 @@ static void move_enemies(void)
 
         case 2: /* walker: this level's monster */
             spear_test(e);
-            if (touches_player(e->x + 2, e->y, e->x + 13, e->y - 15))
+            if (hits_player(e, level_monster_pic(G.data, G.level, e->frame), e->x + 2, e->y, e->x + 13, e->y - 15))
                 kill_player();
             if (!G.frozen) {
-                if (!enemy_blocked(i, e->x - 4, e->x + 18, e->y)) {
+                if (!enemy_blocked(i, e->x - 4, e->x + 18, e->y, true)) {
                     e->x += e->speed * e->dx;
                     anim_inc(&e->frame);
                 } else {
@@ -852,7 +963,7 @@ static void move_enemies(void)
                                          : between(G.px + 18, e->x, e->x + 15);
             if (beside && e->y == G.py) {
                 const int step = G.facing ? -2 : 2, edge = G.facing ? 14 : 0;
-                if (!enemy_blocked(i, nx - 8, nx + 22, e->y)) {
+                if (!enemy_blocked(i, nx - 8, nx + 22, e->y, false)) {
                     g3_draw(e->x + edge, e->y, e->x + edge, e->y - 15, 0);
                     g3_draw(e->x + edge + 1, e->y, e->x + edge + 1, e->y - 15, 0);
                     e->x += step;
@@ -867,10 +978,10 @@ static void move_enemies(void)
         }
 
         case 4: case 5: /* vertical bouncing hazards */
-            if (touches_player(e->x, e->y + 2, e->x + 15, e->y - 15))
+            if (hits_player(e, gamedata_sprite(G.data, SET_VHAZARD, e->type == 4 ? 1 : 3), e->x, e->y + 2, e->x + 15, e->y - 15))
                 kill_player();
             if (!G.frozen) {
-                if (dot(e->x + 8, ny + 1) == 0 && dot(e->x, ny - 16) == 0) {
+                if (enemy_dot(e->x + 8, ny + 1) == 0 && enemy_dot(e->x, ny - 16) == 0) {
                     if (e->y - 13 > -1)
                         e->y += e->speed * e->dy;
                 } else {
@@ -903,10 +1014,10 @@ static void move_enemies(void)
             break;
 
         case 7: /* tall vertical hazard */
-            if (touches_player(e->x, e->y + 2, e->x + 15, e->y - 17))
+            if (hits_player(e, gamedata_sprite(G.data, SET_TALL_HAZARD, 2), e->x, e->y + 2, e->x + 15, e->y - 17))
                 kill_player();
             if (!G.frozen) {
-                if (dot(e->x, ny + 1) == 0 && dot(e->x, ny - 18) == 0) {
+                if (enemy_dot(e->x, ny + 1) == 0 && enemy_dot(e->x, ny - 18) == 0) {
                     e->y += e->speed * e->dy;
                     pic(SET_TALL_HAZARD, 2, e->x, e->y);
                 } else {
@@ -917,11 +1028,11 @@ static void move_enemies(void)
 
         case 8: /* bat: crawls along a ceiling */
             spear_test(e);
-            if (touches_player(e->x + 2, e->y, e->x + 13, e->y - 14))
+            if (hits_player(e, gamedata_sprite(G.data, SET_BAT, e->frame - 1), e->x + 2, e->y, e->x + 13, e->y - 14))
                 kill_player();
             if (!G.frozen) {
-                if (dot(nx, ny - 17) != 0 && dot(nx + 15, ny - 17) != 0 && dot(nx - 2, ny) == 0 &&
-                    dot(nx + 17, ny) == 0 && nx > 2 && nx < 318) {
+                if (enemy_dot(nx, ny - 17) != 0 && enemy_dot(nx + 15, ny - 17) != 0 && enemy_dot(nx - 2, ny) == 0 &&
+                    enemy_dot(nx + 17, ny) == 0 && nx > 2 && nx < 318) {
                     e->x += e->speed * e->dx;
                     anim_inc(&e->frame);
                 } else {
@@ -945,11 +1056,11 @@ static void move_enemies(void)
                     g3_plot(G.dart_rx, G.dart_ry, 0);
                     G.dart_rx += 4;
                     g3_plot(G.dart_rx, G.dart_ry, 1);
-                    if (between(G.dart_rx, G.px - 4, G.px + 19) && between(G.dart_ry, G.py - 17, G.py)) {
+                    if (dart_hits(G.dart_rx, G.dart_ry, 4)) {
                         g3_plot(G.dart_rx, G.dart_ry, 0);
                         G.dart_r = false;
                         kill_player();
-                    } else if (G.dart_rx > 320 || dot(G.dart_rx + 4, G.dart_ry) != 0) {
+                    } else if (G.dart_rx > 320 || enemy_dot(G.dart_rx + 4, G.dart_ry) != 0) {
                         g3_plot(G.dart_rx, G.dart_ry, 0);
                         G.dart_r = false;
                         G.dart_ry = -32;
@@ -972,11 +1083,11 @@ static void move_enemies(void)
                     g3_plot(G.dart_lx, *ly, 0);
                     G.dart_lx -= 4;
                     g3_plot(G.dart_lx, *ly, 1);
-                    if (between(G.dart_lx, G.px - 4, G.px + 19) && between(*ly, G.py - 17, G.py)) {
+                    if (dart_hits(G.dart_lx, *ly, -4)) {
                         g3_plot(G.dart_lx, *ly, 0);
                         G.dart_l = false;
                         kill_player();
-                    } else if (G.dart_lx < 0 || dot(G.dart_lx - 4, *ly) != 0) {
+                    } else if (G.dart_lx < 0 || enemy_dot(G.dart_lx - 4, *ly) != 0) {
                         g3_plot(G.dart_lx, *ly, 0);
                         G.dart_l = false;
                         *ly = -32;
@@ -1281,6 +1392,15 @@ static bool script_command(const char *cmd, int a, int b)
     if (!strcmp(cmd, "state")) {
         printf("[tick %u] player %d,%d%s  treasure %d  score %.0f  lives %d  spears %d\n", tick_total,
                G.px, G.py, G.jumping ? " (in the air)" : "", G.treasure, G.score, G.lives, G.spears);
+        return true;
+    }
+    if (!strcmp(cmd, "enemies")) { /* the player's facing and frame, then each occupied enemy
+                                      slot's type, position and frame */
+        printf("[tick %u] facing %d frame %d, enemies", tick_total, G.facing, G.frame);
+        for (int i = 1; i <= MAX_ENEMIES; i++)
+            if (!G.lv.enemy[i].free)
+                printf("  %d:%d,%d,%d", G.lv.enemy[i].type, G.lv.enemy[i].x, G.lv.enemy[i].y, G.lv.enemy[i].frame);
+        printf("\n");
         return true;
     }
     return false;

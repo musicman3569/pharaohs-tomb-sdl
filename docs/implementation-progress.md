@@ -190,7 +190,15 @@ difference):
    commands on volume 1 level 1's isolated gem (row 9, col 9): classic cut 11 of 24 jumps
    short (peak y 157-158 instead of 144), enhanced none; the gem was collected every time.
 2. Higher frame rate and smoother movement.
-3. Accurate hit detection. The current bounding boxes are too big an inaccurate.
+3. ~~Accurate hit detection. The current bounding boxes are too big an inaccurate.~~ Done,
+   `gameplay.pixel_hits` (classic off, enhanced on; see notes.md, "Hit boxes vs pixels").
+   Deaths (walkers, hazards, bats, darts, spikes) need the explorer's pixels to touch the
+   killer's; deadly enemies / darts and the player ignore each other's pixels in their movement
+   checks so contact can happen (else hazards bounce off the hat 3 px short). Classic measured
+   2-5 px gaps at death, enhanced 0. The spear's hit box is deliberately unchanged: the level 3
+   monster has nothing on the spear's row, so a pixel test would make it unkillable. Tested
+   with the new `enemies` script command and a gap-measuring harness (not committed); classic
+   traces are identical to the previous build. Not tried by hand.
 4. ~~Fullscreen mode~~: done, `display.fullscreen` (a preference, off in both presets), F11 /
    Alt+Enter; the pointer hides after 2 s still in fullscreen.
 5. ~~Menu mouse support and/or arrow/controller movement highlighting~~: done,

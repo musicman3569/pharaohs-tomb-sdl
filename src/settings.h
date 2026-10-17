@@ -36,6 +36,8 @@ typedef struct {
 
     /* gameplay (enhancements) */
     int solid_pickups; /* gameplay.solid_pickups: pickups block movement until touched */
+    int pixel_hits;    /* gameplay.pixel_hits: enemies, darts and spikes kill only when their
+                          pixels touch the player's, instead of the original's hit boxes */
 
     /* menus (enhancement) */
     int navigation; /* menu.navigation: a cursor on the main menu (arrows, d-pad, mouse),

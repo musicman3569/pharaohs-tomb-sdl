@@ -33,6 +33,9 @@ static const struct {
     {"gameplay.solid_pickups", T_BOOL, offsetof(settings_t, solid_pickups), 0, 1, 1, 0,
      "pickups (gems, keys, spears, T, artifacts...) block you like walls until you touch them, as\n"
      "; in the original, so some jumps into them stop short. Off = you always reach them"},
+    {"gameplay.pixel_hits", T_BOOL, offsetof(settings_t, pixel_hits), 0, 1, 0, 1,
+     "enemies, darts and spikes kill you only when their pixels touch the explorer's. Off = the\n"
+     "; original's hit boxes, which reach a few pixels past most of the pictures"},
     {"menu.navigation", T_BOOL, offsetof(settings_t, navigation), 0, 1, 0, 1,
      "main menu cursor: arrows / d-pad / mouse move it, Enter / Space / A / click choose; clicks\n"
      "; also work as a key on \"press any key\" screens. Off = the original's letter keys only"},

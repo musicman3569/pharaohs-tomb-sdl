@@ -97,6 +97,13 @@ void level_draw_monster(const gamedata_t *g, int level, int frame, int x, int y)
         put_sprite(g, level_monster_set[level], frame - 1, x, y);
 }
 
+const uint8_t *level_monster_pic(const gamedata_t *g, int level, int frame)
+{
+    if (level < 1 || level > MAX_LEVELS)
+        return NULL;
+    return gamedata_sprite(g, level_monster_set[level], frame - 1);
+}
+
 const uint8_t *level_blank_pic(void)
 {
     return blank_pic;
@@ -144,10 +151,14 @@ static void draw_level_row(level_t *lv, const gamedata_t *g, int row, const char
         if (!t)
             continue;
 
-        if (t->flags & T_RANDOM_FRAME)
-            put_sprite(g, t->set, tp_random(4), x, y);
-        else if (t->set >= 0)
+        if (t->flags & T_RANDOM_FRAME) {
+            const int frame = tp_random(4);
+            put_sprite(g, t->set, frame, x, y);
+            lv->tile_pic[row][col] = gamedata_sprite(g, t->set, frame);
+        } else if (t->set >= 0) {
             put_sprite(g, t->set, t->frame, x, y);
+            lv->tile_pic[row][col] = gamedata_sprite(g, t->set, t->frame);
+        }
         if (t->flags & T_DRAW_UP2)
             put_sprite(g, t->set, t->frame, x, y - 2);
         if (t->flags & T_MONSTER)
