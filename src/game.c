@@ -29,8 +29,21 @@ enum {
     SET_GLINT = 21,     /* B43A */
 };
 
+/* Enemy sprites (MoveEnemies). */
+enum {
+    SET_PLATFORM = 8,    /* 96FA frame 0, type 1 */
+    SET_BLOCK = 9,       /* 9B3E frame 3, type 3 */
+    SET_VHAZARD = 10,    /* 9C76 frame 1 (type 4), 9DAE frame 3 (type 5) */
+    SET_ELEVATOR = 11,   /* A01E frame 3, type 6 */
+    SET_TALL_HAZARD = 12,/* A1F2 frame 2, type 7 */
+    SET_BAT = 18,        /* ACEA frames 0..3, type 8 */
+    SET_SPARKLE = 20,    /* AF5A frames 0..3, enemy death */
+};
+
 /* ------------------------------------------------------------------------------------------ */
 /* Small helpers                                                                              */
+
+static void restore_overlaps(int x0, int y0, int x1, int y1);
 
 static void pic(int set, int frame, int x, int y)
 {
@@ -42,6 +55,7 @@ static void pic(int set, int frame, int x, int y)
 static void blank(int x, int y)
 {
     g3_put_pic(level_blank_pic(), x, y);
+    restore_overlaps(x, y - 15, x + 15, y);
 }
 
 static int dot(int x, int y)
@@ -77,14 +91,19 @@ static bool is_pickup(int code)
  * the player. Otherwise a hazard turns back off the player's head, and the player stands on
  * spikes or a monster, a few pixels short of contact, where the old boxes did the killing. */
 
-/* Is the pixel at (x, y) of a picture put at (px, py) non-black? Outside it reads as black. */
-static bool pic_dot(const uint8_t *pic, int px, int py, int x, int y)
+/* The colour of the pixel at (x, y) of a picture put at (px, py); 0 (black) outside it. */
+static int pic_color(const uint8_t *pic, int px, int py, int x, int y)
 {
     const int w = pic[2] | pic[3] << 8, h = pic[4] | pic[5] << 8;
     const int c = x - px, r = py - y; /* r counts up from the bottom row, as stored */
     if (c < 0 || c >= w || r < 0 || r >= h)
-        return false;
-    return (pic[6 + r * ((w + 3) / 4) + c / 4] >> (6 - 2 * (c % 4)) & 3) != 0;
+        return 0;
+    return pic[6 + r * ((w + 3) / 4) + c / 4] >> (6 - 2 * (c % 4)) & 3;
+}
+
+static bool pic_dot(const uint8_t *pic, int px, int py, int x, int y)
+{
+    return pic_color(pic, px, py, x, y) != 0;
 }
 
 /* Is a non-black pixel of `pic` (put at px, py) on or next to (x, y)? */
@@ -163,6 +182,99 @@ static int enemy_dot(int x, int y)
     if (settings.pixel_hits && x >= G.px && x <= G.px + 15 && y >= G.py - 15 && y <= G.py)
         return 0; /* the player's picture */
     return dot(x, y);
+}
+
+/* Drawing with gameplay.pixel_hits. PutPic is opaque, and the game depends on that: a sprite's
+ * black margin erases its own trail as it moves. But now the explorer can share space with a
+ * monster, a spike tile or (solid_pickups off) a pickup, and whichever is drawn last blanks
+ * the other with its black background. So after each draw of one of those, the non-black
+ * pixels of the others it covered are put back: tiles, then enemies, then the explorer, who
+ * stays on top. Every movement check already ignores these pixels (player_dot, enemy_dot), so
+ * this only changes what you see. Only in play: the title demo keeps the original's drawing. */
+static bool playing;                /* inside game_play */
+static const uint8_t *player_shown; /* the explorer's picture on screen, NULL if none */
+static int shown_x, shown_y;
+
+static bool overlay_on(void)
+{
+    return settings.pixel_hits && playing;
+}
+
+/* A deadly enemy's picture, as MoveEnemies draws it. */
+static const uint8_t *enemy_pic(const enemy_t *e)
+{
+    switch (e->type) {
+    case 2: return level_monster_pic(G.data, G.level, e->frame);
+    case 4: return gamedata_sprite(G.data, SET_VHAZARD, 1);
+    case 5: return gamedata_sprite(G.data, SET_VHAZARD, 3);
+    case 7: return gamedata_sprite(G.data, SET_TALL_HAZARD, 2);
+    case 8: return gamedata_sprite(G.data, SET_BAT, e->frame - 1);
+    default: return NULL;
+    }
+}
+
+/* PutPic with colour 0 transparent, clipped to the rectangle x0..x1, y0..y1. */
+static void overlay_pic(const uint8_t *p, int px, int py, int x0, int y0, int x1, int y1)
+{
+    if (!p)
+        return;
+    for (int y = y0 > py - 15 ? y0 : py - 15; y <= y1 && y <= py; y++)
+        for (int x = x0 > px ? x0 : px; x <= x1 && x <= px + 15; x++) {
+            const int c = pic_color(p, px, py, x, y);
+            if (c)
+                g3_plot(x, y, c);
+        }
+}
+
+/* Does a 16x16 picture put at (px, py) reach into x0..x1, y0..y1? */
+static bool pic_meets(int px, int py, int x0, int y0, int x1, int y1)
+{
+    return px <= x1 && px + 15 >= x0 && py - 15 <= y1 && py >= y0;
+}
+
+/* Put back what a draw over x0..x1, y0..y1 may have blanked. */
+static void restore_overlaps(int x0, int y0, int x1, int y1)
+{
+    if (!overlay_on())
+        return;
+    for (int r = 1; r <= LEVEL_ROWS; r++)
+        for (int c = 1; c <= LEVEL_COLS; c++) {
+            const int code = G.lv.map[r][c];
+            if ((code == 0x09 || (!settings.solid_pickups && is_pickup(code))) &&
+                pic_meets((c - 1) * 16, r * 16, x0, y0, x1, y1))
+                overlay_pic(G.lv.tile_pic[r][c], (c - 1) * 16, r * 16, x0, y0, x1, y1);
+        }
+    for (int i = 1; i <= MAX_ENEMIES; i++) {
+        const enemy_t *e = &G.lv.enemy[i];
+        if (is_deadly(e) && pic_meets(e->x, e->y, x0, y0, x1, y1))
+            overlay_pic(enemy_pic(e), e->x, e->y, x0, y0, x1, y1);
+    }
+    if (player_shown && pic_meets(shown_x, shown_y, x0, y0, x1, y1))
+        overlay_pic(player_shown, shown_x, shown_y, x0, y0, x1, y1);
+}
+
+/* Draw the explorer (one of his sets) where he is. */
+static void player_pic(int set, int frame)
+{
+    pic(set, frame, G.px, G.py);
+    player_shown = gamedata_sprite(G.data, set, frame);
+    shown_x = G.px;
+    shown_y = G.py;
+    restore_overlaps(G.px, G.py - 15, G.px + 15, G.py);
+}
+
+/* After MoveEnemies draws a deadly enemy. */
+static void enemy_drawn(const enemy_t *e)
+{
+    restore_overlaps(e->x, e->y - 15, e->x + 15, e->y);
+}
+
+/* A dart's dot: Plot, then put back anything under it when it's erased. */
+static void dart_plot(int x, int y, int color)
+{
+    g3_plot(x, y, color);
+    if (color == 0)
+        restore_overlaps(x, y, x, y);
 }
 
 static int upcase(int c)
@@ -251,9 +363,9 @@ static void flush_keyboard(void)
 static void draw_player(void)
 {
     if (!G.invisible)
-        pic(G.facing ? SET_WALK_LEFT : SET_WALK_RIGHT, G.frame - 1, G.px, G.py);
+        player_pic(G.facing ? SET_WALK_LEFT : SET_WALK_RIGHT, G.frame - 1);
     else
-        pic(SET_INVISIBLE, G.frame - 1, G.px, G.py);
+        player_pic(SET_INVISIBLE, G.frame - 1);
 }
 
 /* 1000:380B footstep click */
@@ -292,21 +404,21 @@ static void player_walk(int dx)
                  * first turns of a game only, as in the original. */
                 G.turn_count++;
                 if (!G.invisible)
-                    pic(SET_JUMP_RIGHT, 1, G.px, G.py);
+                    player_pic(SET_JUMP_RIGHT, 1);
                 else
-                    pic(SET_INVISIBLE, G.frame - 1, G.px, G.py);
+                    player_pic(SET_INVISIBLE, G.frame - 1);
                 if (G.turn_count == 0)
                     G.turn_count = 1;
             } else if (!G.facing) {
                 if (G.jumping && !G.invisible)
-                    pic(SET_JUMP_RIGHT, 0, G.px, G.py);
+                    player_pic(SET_JUMP_RIGHT, 0);
                 else
                     draw_player();
                 G.facing = 0;
                 footstep();
             } else {
                 if (G.jumping && !G.invisible)
-                    pic(SET_JUMP_LEFT, 0, G.px, G.py);
+                    player_pic(SET_JUMP_LEFT, 0);
                 else
                     draw_player();
                 G.facing = 1;
@@ -412,7 +524,7 @@ static void player_jump_step(int dy)
             player_move_horizontal();
         }
         if (!G.invisible)
-            pic(G.facing ? SET_JUMP_LEFT : SET_JUMP_RIGHT, 0, G.px, G.py);
+            player_pic(G.facing ? SET_JUMP_LEFT : SET_JUMP_RIGHT, 0);
         else
             draw_player();
         plat_nosound();
@@ -505,6 +617,7 @@ static void game_over_screen(void)
 /* 1000:34C3 */
 static void kill_player(void)
 {
+    player_shown = NULL; /* the death animation replaces him */
     sfx_death(G.sound_on);
     for (int n = 1; n <= 4; n++)
         for (int f = 1; f <= 4; f++) {
@@ -796,16 +909,6 @@ static void touch_tile(int x, int y)
 /* ------------------------------------------------------------------------------------------ */
 /* MoveEnemies (1000:1FA0)                                                                    */
 
-enum {
-    SET_PLATFORM = 8,    /* 96FA frame 0, type 1 */
-    SET_BLOCK = 9,       /* 9B3E frame 3, type 3 */
-    SET_VHAZARD = 10,    /* 9C76 frame 1 (type 4), 9DAE frame 3 (type 5) */
-    SET_ELEVATOR = 11,   /* A01E frame 3, type 6 */
-    SET_TALL_HAZARD = 12,/* A1F2 frame 2, type 7 */
-    SET_BAT = 18,        /* ACEA frames 0..3, type 8 */
-    SET_SPARKLE = 20,    /* AF5A frames 0..3, enemy death */
-};
-
 /* 1000:1CB0 TouchesPlayer(left, bottom, right, top): is any of eight points on the player's box
  * inside the rectangle? (The centre point isn't tested.) */
 static bool touches_player(int left, int bottom, int right, int top)
@@ -883,8 +986,8 @@ static void spear_test(enemy_t *e)
                 pic(SET_SPARKLE, f - 1, e->x, e->y);
                 plat_delay(1);
             }
+            e->free = true; /* first, so blank() doesn't put it back */
             blank(e->x, e->y);
-            e->free = true;
             e->x = -32;
             draw_status_bar();
         }
@@ -955,6 +1058,7 @@ static void move_enemies(void)
                     e->x += e->speed * e->dx;
                 }
                 level_draw_monster(G.data, G.level, e->frame, e->x, e->y);
+                enemy_drawn(e);
             }
             break;
 
@@ -989,6 +1093,7 @@ static void move_enemies(void)
                     e->y -= 1;
                 }
                 pic(SET_VHAZARD, e->type == 4 ? 1 : 3, e->x, e->y);
+                enemy_drawn(e);
             }
             break;
 
@@ -1020,6 +1125,7 @@ static void move_enemies(void)
                 if (enemy_dot(e->x, ny + 1) == 0 && enemy_dot(e->x, ny - 18) == 0) {
                     e->y += e->speed * e->dy;
                     pic(SET_TALL_HAZARD, 2, e->x, e->y);
+                    enemy_drawn(e);
                 } else {
                     e->dy = -e->dy;
                 }
@@ -1040,6 +1146,7 @@ static void move_enemies(void)
                     e->x += e->speed * e->dx;
                 }
                 pic(SET_BAT, e->frame - 1, e->x, e->y);
+                enemy_drawn(e);
             }
             break;
 
@@ -1053,15 +1160,15 @@ static void move_enemies(void)
             if (tick_counter[TICK_7F72] != 0) {
                 tick_counter[TICK_7F72] = 0;
                 if (G.dart_r) {
-                    g3_plot(G.dart_rx, G.dart_ry, 0);
+                    dart_plot(G.dart_rx, G.dart_ry, 0);
                     G.dart_rx += 4;
-                    g3_plot(G.dart_rx, G.dart_ry, 1);
+                    dart_plot(G.dart_rx, G.dart_ry, 1);
                     if (dart_hits(G.dart_rx, G.dart_ry, 4)) {
-                        g3_plot(G.dart_rx, G.dart_ry, 0);
+                        dart_plot(G.dart_rx, G.dart_ry, 0);
                         G.dart_r = false;
                         kill_player();
                     } else if (G.dart_rx > 320 || enemy_dot(G.dart_rx + 4, G.dart_ry) != 0) {
-                        g3_plot(G.dart_rx, G.dart_ry, 0);
+                        dart_plot(G.dart_rx, G.dart_ry, 0);
                         G.dart_r = false;
                         G.dart_ry = -32;
                     }
@@ -1080,15 +1187,15 @@ static void move_enemies(void)
             if (tick_counter[TICK_7F70] != 0) {
                 tick_counter[TICK_7F70] = 0;
                 if (G.dart_l) {
-                    g3_plot(G.dart_lx, *ly, 0);
+                    dart_plot(G.dart_lx, *ly, 0);
                     G.dart_lx -= 4;
-                    g3_plot(G.dart_lx, *ly, 1);
+                    dart_plot(G.dart_lx, *ly, 1);
                     if (dart_hits(G.dart_lx, *ly, -4)) {
-                        g3_plot(G.dart_lx, *ly, 0);
+                        dart_plot(G.dart_lx, *ly, 0);
                         G.dart_l = false;
                         kill_player();
                     } else if (G.dart_lx < 0 || enemy_dot(G.dart_lx - 4, *ly) != 0) {
-                        g3_plot(G.dart_lx, *ly, 0);
+                        dart_plot(G.dart_lx, *ly, 0);
                         G.dart_l = false;
                         *ly = -32;
                     }
@@ -1274,7 +1381,7 @@ void game_tick(void)
     if (!G.on_platform && player_dot(G.px, G.py + 2) == 0 && player_dot(G.px + 14, G.py + 2) == 0 && !G.jumping) {
         G.py++;
         if (!G.invisible)
-            pic(G.facing ? SET_JUMP_LEFT : SET_JUMP_RIGHT, 0, G.px, G.py);
+            player_pic(G.facing ? SET_JUMP_LEFT : SET_JUMP_RIGHT, 0);
         else
             draw_player();
         G.falling = true;
@@ -1377,6 +1484,7 @@ void game_reset_state(const gamedata_t *data, int key_layout)
 static bool script_command(const char *cmd, int a, int b)
 {
     if (!strcmp(cmd, "player")) {
+        player_shown = NULL;
         blank(G.px, G.py);
         G.px = a;
         G.py = b;
@@ -1410,6 +1518,7 @@ void game_play(int level, bool cheat)
 {
     /* PlayGame (1000:53B7) */
     plat_script_handler(script_command);
+    playing = true;
     G.cheat = cheat;
     G.quit = G.game_over = false;
     const pad_mode_t old_mode = pad_set_mode(PAD_GAME);
@@ -1431,6 +1540,7 @@ void game_play(int level, bool cheat)
         plat_pace(GAME_TICK_HZ);
     }
     pad_set_mode(old_mode);
+    playing = false;
 }
 
 void game_title_demo(const gamedata_t *data, int key_layout)
@@ -1536,9 +1646,13 @@ void game_start_level(int level)
     G.invisible = level == 17;
 
     level_start(&G.lv, G.data, level);
+    player_shown = NULL;
     if (G.lv.player_found) {
         G.px = G.lv.player_x;
         G.py = G.lv.player_y;
+        player_shown = gamedata_sprite(G.data, SET_WALK_RIGHT, 0); /* the Y tile */
+        shown_x = G.px;
+        shown_y = G.py;
     }
     draw_status_bar();
 }

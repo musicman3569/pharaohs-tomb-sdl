@@ -199,6 +199,8 @@ difference):
    monster has nothing on the spear's row, so a pixel test would make it unkillable. Tested
    with the new `enemies` script command and a gap-measuring harness (not committed); classic
    traces are identical to the previous build. Not tried by hand.
+   Overlapping pictures blanked each other (opaque PutPic), so with the setting on, the
+   pixels a draw covers are put back afterwards (`restore_overlaps`), explorer on top.
 4. ~~Fullscreen mode~~: done, `display.fullscreen` (a preference, off in both presets), F11 /
    Alt+Enter; the pointer hides after 2 s still in fullscreen.
 5. ~~Menu mouse support and/or arrow/controller movement highlighting~~: done,

@@ -710,3 +710,13 @@ elevators, pushable blocks and the spear are unchanged. Measured: every enhanced
 happens at gap 0 or overlap, walkers kill from both sides, and placements where classic's box
 reached into empty space (a walker turning at a wall 3 px away) survive. Classic runs are
 byte-identical to the build before the change (state traces and screenshots).
+
+Drawing: PutPic is opaque, and the game needs that (a sprite's black margin erases its own trail,
+and the 1-2 px moves rely on it). Once pictures can share space, the one drawn last blanks the
+other with its black background (the explorer cut in half by a walker, spike tips erased for
+good). So with `pixel_hits` on, during play only (the title demo is untouched), each opaque draw
+of the explorer, a deadly enemy, a dart erase or a blank is followed by `restore_overlaps`, which
+puts back the non-black pixels it covered: spike tiles (and pickups when `solid_pickups` is off),
+then deadly enemies, then the explorer, so he stays on top. All of those pixels are already
+ignored by the movement checks that could meet them (`player_dot`, `enemy_dot`), so play is
+unchanged: sequential runs give identical traces with and without it.

@@ -145,7 +145,8 @@ default), and **enhanced**, which switches on every enhancement. So far that is:
   most of the pictures, so you could die with clear space between you and a hazard. Enemies
   now also come all the way to you instead of turning back off your pixels a few short (in
   the original a walker coming from the right turned around on your hat and never killed
-  you). Spear hits on monsters keep the original's generous box.
+  you). Where pictures overlap, their black backgrounds are see-through, so neither cuts
+  holes in the other. Spear hits on monsters keep the original's generous box.
 - **Main menu cursor** (`menu.navigation`): a highlight you move with the arrow keys, the
   d-pad or the mouse, and choose with Enter, Space, A or a click. The letter keys still work.
   Clicks also count as a key on "press any key" screens. (In classic, as in the original,
