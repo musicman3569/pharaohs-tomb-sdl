@@ -137,6 +137,9 @@ Port keys:
 The port has two presets: **classic**, the original game exactly as released in v1.0.0 (the
 default), and **enhanced**, which switches on every enhancement. So far that is:
 
+- **Pickups don't get in your way** (`gameplay.solid_pickups = off`): in the original, gems,
+  keys, spears and the other pickups are solid until you touch them, so some jumps into them
+  stop short (about half the jumps into a gem from the side of it). Now you always reach them.
 - **Main menu cursor** (`menu.navigation`): a highlight you move with the arrow keys, the
   d-pad or the mouse, and choose with Enter, Space, A or a click. The letter keys still work.
   Clicks also count as a key on "press any key" screens. (In classic, as in the original,
@@ -157,6 +160,9 @@ fullscreen = off      ; F11 or Alt+Enter switches
 
 [input]
 joystick = on         ; start with the controller on (the original started with it off)
+
+[gameplay]
+solid_pickups = on    ; pickups block you until touched, as in the original (off in enhanced)
 
 [menu]
 navigation = off      ; the main menu cursor (on in enhanced)
@@ -207,6 +213,9 @@ example, `--script "wait 70; down right; wait 18; up right; shot a.png; quit"`.
 | `tap KEY` | press a key for one tick |
 | `shot FILE.png` | save a screenshot |
 | `mouse X Y` / `click X Y` | move the mouse / click, in 320x200 screen pixels |
+| `player X Y` | put the player at X, Y (Y is their bottom row), in a level |
+| `jump` | start a jump from where the player is, even in mid-air |
+| `state` | print the player's position, treasure, score, lives and spears |
 | `quit` | close the port |
 
 `KEY` is `left`, `right`, `up`, `down`, `space`, `esc`, `enter`, `pgup`, `pgdn`, `f11` or a single

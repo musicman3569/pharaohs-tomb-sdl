@@ -400,6 +400,13 @@ shift_keys_t plat_shift_keys(void)
  * KEY is left, right, up, down, space, esc, enter, pgup, pgdn, f11, or a single character, or a control on a
  * virtual game controller: pad_a, pad_b, pad_x, pad_start, pad_back, pad_left, ... (gamepad.h). */
 static char script_buf[4096];
+static bool (*script_handler)(const char *cmd, int a, int b);
+
+void plat_script_handler(bool (*fn)(const char *cmd, int a, int b))
+{
+    script_handler = fn;
+}
+
 static char *script_pos;
 static uint32_t script_wait_until;
 static const char *script_tap_pending;
@@ -473,8 +480,11 @@ static void run_script(void)
             mouse_y = my;
             if (cmd[0] == 'c')
                 mouse_click();
-        } else if (!strcmp(cmd, "quit"))
+        } else if (!strcmp(cmd, "quit")) {
             quitting = true;
+        } else if (cmd[0] && !(script_handler && script_handler(cmd, mx, my))) {
+            fprintf(stderr, "ptomb: unknown script command '%s'\n", cmd);
+        }
     }
 }
 

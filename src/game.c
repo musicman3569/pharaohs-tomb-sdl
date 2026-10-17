@@ -6,6 +6,7 @@
 #include "gamepad.h"
 #include "graph3.h"
 #include "platform.h"
+#include "settings.h"
 #include "sound.h"
 #include "text.h"
 #include "menu.h"
@@ -46,6 +47,36 @@ static void blank(int x, int y)
 static int dot(int x, int y)
 {
     return g3_get_dot_color(x, y);
+}
+
+/* Port enhancement (gameplay.solid_pickups off). The player's collision reads screen pixels,
+ * pickups included, but a pickup is only collected once TouchTile's points are inside its
+ * cell. Whether the player gets there first depends on the sprite's shape, the height you meet
+ * it at and, in a jump, which of the 4 steps per tick hits it, so some walks and jumps into
+ * pickups stop short (about 1 jump in 5 into a gem). With the setting off, the player's own
+ * collision ignores pixels in a pickup's cell; walls, locks, doors and spikes stay solid. */
+static bool is_pickup(int code)
+{
+    switch (code) {
+    case 0x01: case 0x03: case 0x06: case 0x07:   /* keys, spear, gem */
+    case 0x0C: case 0x0E: case 0x10:              /* switches */
+    case 0x13: case 0x14: case 0x15:              /* invisibility trap, T, freeze */
+    case 0x1A: case 0x1B: case 0x1C: case 0x1D:   /* artifacts */
+        return true;
+    default:
+        return false;
+    }
+}
+
+/* GetDotColor for the player's own movement checks. */
+static int player_dot(int x, int y)
+{
+    if (!settings.solid_pickups && x >= 0 && y >= 0) {
+        const int row = (y + 15) / 16, col = x / 16 + 1; /* the tile drawn over this pixel */
+        if (row >= 1 && row <= LEVEL_ROWS && col <= LEVEL_COLS && is_pickup(G.lv.map[row][col]))
+            return 0;
+    }
+    return dot(x, y);
 }
 
 static int upcase(int c)
@@ -156,9 +187,9 @@ static void footstep(void)
 static void player_walk(int dx)
 {
     if (G.px + dx > -2 && G.px + dx + 17 < 322) {
-        const int c1 = dot(G.px + dx, G.py), c2 = dot(G.px + 15 + dx, G.py);
-        const int c3 = dot(G.px + dx, G.py - 15), c4 = dot(G.px + 15 + dx, G.py - 15);
-        const int c5 = dot(G.px + dx, G.py - 8), c6 = dot(G.px + 15 + dx, G.py - 8);
+        const int c1 = player_dot(G.px + dx, G.py), c2 = player_dot(G.px + 15 + dx, G.py);
+        const int c3 = player_dot(G.px + dx, G.py - 15), c4 = player_dot(G.px + 15 + dx, G.py - 15);
+        const int c5 = player_dot(G.px + dx, G.py - 8), c6 = player_dot(G.px + 15 + dx, G.py - 8);
         if (c1 == 0 && c2 == 0 && c3 == 0 && c4 == 0 && c5 == 0 && c6 == 0) {
             G.walk_blocked = false;
             if (G.pushed)
@@ -281,16 +312,16 @@ static void player_jump_step(int dy)
     G.jump_pitch++;
     G.jump_steps++;
     const int feet = G.jump_steps == 1 ? 0 : 1;
-    const int a = dot(G.px, G.py + dy), b = dot(G.px + 15, G.py + dy);
-    const int c = dot(G.px, G.py - 15 + dy), d = dot(G.px + 15, G.py - 15 + dy);
-    const int e = dot(G.px + 8, G.py + feet);
-    const int f = G.falling ? 0 : dot(G.px + 8, G.py - 16);
+    const int a = player_dot(G.px, G.py + dy), b = player_dot(G.px + 15, G.py + dy);
+    const int c = player_dot(G.px, G.py - 15 + dy), d = player_dot(G.px + 15, G.py - 15 + dy);
+    const int e = player_dot(G.px + 8, G.py + feet);
+    const int f = G.falling ? 0 : player_dot(G.px + 8, G.py - 16);
 
     if (G.py - 15 + dy > 0 && a == 0 && b == 0 && c == 0 && d == 0 && e == 0 && f == 0) {
         if (G.sound_on && G.jump_steps < 10)
             plat_sound(G.jump_pitch * 1000);
         G.py += dy;
-        if ((dot(G.px - 5, G.py + dy) == 0 || dot(G.px - 5, G.py - 15 + dy) == 0) && G.walk_blocked) {
+        if ((player_dot(G.px - 5, G.py + dy) == 0 || player_dot(G.px - 5, G.py - 15 + dy) == 0) && G.walk_blocked) {
             tick_counter[TICK_7F6A] = 1000;
             player_move_horizontal();
         }
@@ -792,7 +823,7 @@ static void move_enemies(void)
             if (player_x_overlaps(e) && e->y - 16 == G.py) { /* carry the player */
                 G.on_platform = true;
                 const int m = e->speed * e->dx;
-                if (dot(G.px - 2 + m, G.py) == 0 && dot(G.px + 17 + m, G.py) == 0)
+                if (player_dot(G.px - 2 + m, G.py) == 0 && player_dot(G.px + 17 + m, G.py) == 0)
                     G.px += m;
                 else
                     G.px -= m;
@@ -1129,7 +1160,7 @@ void game_tick(void)
             G.on_platform = true;
 
     /* gravity */
-    if (!G.on_platform && dot(G.px, G.py + 2) == 0 && dot(G.px + 14, G.py + 2) == 0 && !G.jumping) {
+    if (!G.on_platform && player_dot(G.px, G.py + 2) == 0 && player_dot(G.px + 14, G.py + 2) == 0 && !G.jumping) {
         G.py++;
         if (!G.invisible)
             pic(G.facing ? SET_JUMP_LEFT : SET_JUMP_RIGHT, 0, G.px, G.py);
@@ -1230,9 +1261,35 @@ void game_reset_state(const gamedata_t *data, int key_layout)
         tp_randseed = (uint32_t)tick_total * 2654435761u + 1u;
 }
 
+/* --script commands for testing gameplay: "player X Y" moves the player (standing, not
+ * jumping), "jump" starts a jump from there and "state" prints where they are and the counters. */
+static bool script_command(const char *cmd, int a, int b)
+{
+    if (!strcmp(cmd, "player")) {
+        blank(G.px, G.py);
+        G.px = a;
+        G.py = b;
+        G.jumping = G.falling = G.jump_hit = false;
+        G.jump_pause = 0;
+        draw_player();
+        return true;
+    }
+    if (!strcmp(cmd, "jump")) { /* start a jump from wherever the player is, even mid-air */
+        player_jump();
+        return true;
+    }
+    if (!strcmp(cmd, "state")) {
+        printf("[tick %u] player %d,%d%s  treasure %d  score %.0f  lives %d  spears %d\n", tick_total,
+               G.px, G.py, G.jumping ? " (in the air)" : "", G.treasure, G.score, G.lives, G.spears);
+        return true;
+    }
+    return false;
+}
+
 void game_play(int level, bool cheat)
 {
     /* PlayGame (1000:53B7) */
+    plat_script_handler(script_command);
     G.cheat = cheat;
     G.quit = G.game_over = false;
     const pad_mode_t old_mode = pad_set_mode(PAD_GAME);

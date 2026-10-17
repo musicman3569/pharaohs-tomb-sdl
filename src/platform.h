@@ -56,6 +56,10 @@ void plat_mouse_pos(int *x, int *y);
 void plat_menu_clicks(bool on);
 bool plat_take_click(int *x, int *y);
 
+/* Testing aid: --script commands the platform doesn't know go to this handler, with up to two
+ * numbers after them (game.c's "player X Y" and "state"). It returns true if it knew them. */
+void plat_script_handler(bool (*fn)(const char *cmd, int a, int b));
+
 /* Crt Sound / NoSound: PC speaker square wave. */
 void plat_sound(int hz);
 void plat_nosound(void);

@@ -30,6 +30,9 @@ static const struct {
      "start in fullscreen. F11 or Alt+Enter switches"},
     {"input.joystick", T_BOOL, offsetof(settings_t, joystick), 0, 1, 1, 1,
      "start with the joystick (game controller) on; the original started with it off"},
+    {"gameplay.solid_pickups", T_BOOL, offsetof(settings_t, solid_pickups), 0, 1, 1, 0,
+     "pickups (gems, keys, spears, T, artifacts...) block you like walls until you touch them, as\n"
+     "; in the original, so some jumps into them stop short. Off = you always reach them"},
     {"menu.navigation", T_BOOL, offsetof(settings_t, navigation), 0, 1, 0, 1,
      "main menu cursor: arrows / d-pad / mouse move it, Enter / Space / A / click choose; clicks\n"
      "; also work as a key on \"press any key\" screens. Off = the original's letter keys only"},

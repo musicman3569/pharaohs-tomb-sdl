@@ -34,6 +34,9 @@ typedef struct {
     /* input */
     int joystick;   /* input.joystick: start with the joystick (controller) switched on */
 
+    /* gameplay (enhancements) */
+    int solid_pickups; /* gameplay.solid_pickups: pickups block movement until touched */
+
     /* menus (enhancement) */
     int navigation; /* menu.navigation: a cursor on the main menu (arrows, d-pad, mouse),
                        and clicks counting as a key on "press any key" screens */
