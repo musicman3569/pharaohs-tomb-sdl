@@ -654,3 +654,24 @@ centre at 100, the d-pad as full travel, A = button 1, B or X = button 2. Port c
 joystick starts on, detection follows hotplugging, some buttons also type keys so the menus
 and prompts work from the pad (see README), and button 2 checks the spear count like the
 keyboard does (a deliberate fix, unlike the other quirks, which are kept).
+
+## Pickups and collision
+
+Pickups (keys, spear, gem, switches, T, freeze, artifacts) are drawn pixels, and the player's
+movement checks read pixels, so a pickup is solid until TouchTile collects it. TouchTile only
+looks at the 8-9 points inside the player's box (`y div 16 + 1`, so a tile's bottom line counts
+as the row below), while PlayerWalk looks 2 px ahead and PlayerJumpStep 1 px above the head.
+
+- Walking along the same floor, every pickup is collected first: the sprites have at least 2
+  columns of margin on the probed rows (feet, middle, head).
+- Jumping up into one, the head check can hit its pixels before TouchTile's point above the
+  head (`x+8, y-17`) reaches the cell, because a jump makes 4 steps per tick of `[7F6E]` and
+  TouchTile runs once after them. Then the jump stops there (pause, then fall), and TouchTile
+  collects the pickup from the stuck position. Whether a jump is cut short depends on the
+  starting height mod 4 and the horizontal offset: on volume 1 level 1's gem, 11 of 24 jumps
+  (side offsets 0-10, all 4 phases) peaked at y 157-158 instead of 144.
+- Some sprites (T, freeze, artifacts) also stop a player landing on them or walking into them
+  at some heights, and the gem glint (set 21) adds pixels while it plays.
+
+The port keeps this in classic. `gameplay.solid_pickups = off` (enhanced) makes the player's
+own checks ignore pixels in a pickup's cell.

@@ -182,8 +182,13 @@ difference):
    screen (1854:60C8).
 
 ## Enhancement Ideas
-1. Fix an inconsistent movement glitch where sometimes collision with a collectible like coins 
-   blocks movement (e.g. interrupts a jump mid-flight) and other times not.
+1. ~~Fix an inconsistent movement glitch where sometimes collision with a collectible like coins
+   blocks movement (e.g. interrupts a jump mid-flight) and other times not.~~ Done,
+   `gameplay.solid_pickups` (classic on, enhanced off; see notes.md, "Pickups and collision").
+   `player_dot` in game.c ignores pixels in a pickup's cell for the player's walk / jump /
+   gravity / platform checks. Measured with the `player X Y`, `jump` and `state` script
+   commands on volume 1 level 1's isolated gem (row 9, col 9): classic cut 11 of 24 jumps
+   short (peak y 157-158 instead of 144), enhanced none; the gem was collected every time.
 2. Higher frame rate and smoother movement.
 3. Accurate hit detection. The current bounding boxes are too big an inaccurate.
 4. ~~Fullscreen mode~~: done, `display.fullscreen` (a preference, off in both presets), F11 /
