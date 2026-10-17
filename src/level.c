@@ -124,12 +124,13 @@ static void put_sprite(const gamedata_t *g, int set, int frame, int x, int y)
         g3_put_pic(pic, x, y);
 }
 
-/* SpawnEnemy (1854:64FB). The counter advances even when no slot is used, as in the game. */
-static void spawn_enemy(level_t *lv, int type, int x, int y, int speed, int dx, int dy)
+/* SpawnEnemy (1854:64FB). The counter advances even when no slot is used, as in the game.
+ * Returns the slot, or NULL. */
+static enemy_t *spawn_enemy(level_t *lv, int type, int x, int y, int speed, int dx, int dy)
 {
     lv->spawn_count++;
     if (lv->spawn_count > MAX_ENEMIES || !lv->enemy[lv->spawn_count].free)
-        return;
+        return NULL;
     enemy_t *e = &lv->enemy[lv->spawn_count];
     e->type = type;
     e->x = x;
@@ -139,6 +140,7 @@ static void spawn_enemy(level_t *lv, int type, int x, int y, int speed, int dx, 
     e->dy = dy;
     e->frame = 1;
     e->free = false;
+    return e;
 }
 
 /* DrawLevelRow(row, s) */
@@ -178,8 +180,14 @@ static void draw_level_row(level_t *lv, const gamedata_t *g, int row, const char
             lv->player_y = y;
             lv->player_found = true;
         }
-        if (t->type)
-            spawn_enemy(lv, t->type, x, y + t->y_off, t->speed, t->dx, t->dy);
+        if (t->type) {
+            enemy_t *e = spawn_enemy(lv, t->type, x, y + t->y_off, t->speed, t->dx, t->dy);
+            if (e) { /* what's on screen: the tile's picture, where it was drawn (not y_off) */
+                e->shown = t->flags & T_MONSTER ? level_monster_pic(g, lv->level, 1) : lv->tile_pic[row][col];
+                e->shown_x = x;
+                e->shown_y = t->flags & T_DRAW_UP2 ? y - 2 : y;
+            }
+        }
     }
 }
 

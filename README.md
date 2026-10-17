@@ -129,6 +129,8 @@ Port keys:
 | F1 | CGA palette 0 (green/red/brown, default) or 1 (cyan/magenta/white, the original) |
 | F2 | low / high intensity |
 | F3 | 4:3 aspect correction on/off |
+| F4 | custom sprites on/off (`display.sprites`) |
+| F5 | smooth movement on/off (`display.smooth`) |
 | F11 or Alt+Enter | fullscreen on/off |
 | F12 | save a screenshot PNG in the current directory |
 
@@ -151,6 +153,13 @@ default), and **enhanced**, which switches on every enhancement. So far that is:
   d-pad or the mouse, and choose with Enter, Space, A or a click. The letter keys still work.
   Clicks also count as a key on "press any key" screens. (In classic, as in the original,
   the arrow keys type letters: Up opens the high scores.)
+- **Smooth movement** (`display.smooth`): the game moves things on its 18 Hz timer, 1 to 4
+  pixels at a time. The window now shows them gliding between those steps, at your monitor's
+  refresh rate. Only the picture changes: the game still runs on its own steps, and plays
+  exactly as it does without it.
+- **Custom sprites** (`display.sprites`): draw the game with your own sprite art, in full
+  colour and up to 8 times the detail. See "Custom sprites" below. The game still sees its
+  own 4-colour pictures; this is only what the window shows.
 
 Choose a preset with `--classic` or `--enhanced`, or in a `ptomb.ini` file next to
 `ptomb.exe`, which can also change single settings:
@@ -164,6 +173,9 @@ palette = 0           ; 0 = green/red/brown, 1 = cyan/magenta/white (the origina
 bright = off
 aspect = on           ; stretch to 4:3, as a CRT showed it
 fullscreen = off      ; F11 or Alt+Enter switches
+smooth = off          ; things glide between the game's steps (on in enhanced). F5 switches
+sprites = off         ; custom sprite art from sprite_dir (on in enhanced). F4 switches
+sprite_dir = sprites  ; the folder with it; relative = next to ptomb.exe
 
 [input]
 joystick = on         ; start with the controller on (the original started with it off)
@@ -177,7 +189,32 @@ navigation = off      ; the main menu cursor (on in enhanced)
 ```
 
 `ptomb --print-settings > ptomb.ini` writes a complete file with every setting explained.
-The command line overrides the file: `--set display.palette=1`, for example. F1-F3 and F11
+
+### Custom sprites
+
+With `display.sprites` on (enhanced), the port draws every sprite (tiles, items, enemies, the
+explorer) from PNG files in a `sprites` folder next to `ptomb.exe` (or `display.sprite_dir`).
+Each file is one of the game's 40 sprite sets, in the layout `tools/extract_gfx.py` writes, so
+the easiest start is to extract the originals and edit them:
+
+```
+python tools/extract_gfx.py sprites unpacked/PTOMB1.EXE build/sprites --palette 0
+```
+
+- A file holds a set's 4 frames side by side, each in a 24x24 cell with a 1-pixel border round
+  the cells (101 x 26 pixels), times a whole zoom from 1 to 8. The extracted files are 4 times
+  (404 x 104), so you can draw at 4 times the detail. A 16x16 sprite fills the top-left of its
+  cell. Different sets may use different zooms.
+- Names: `setNN.png` or the extracted `setNN_dsXXXX.png`. A `volN` subfolder (`sprites/vol2`)
+  is looked in first, for art that differs by volume; the game's sprites are the same in all
+  four.
+- Any PNG type works (not interlaced). On moving things, transparent pixels show the
+  background, or black ones if the file has no transparency. On still tiles everything in the
+  cell is drawn, as the game draws its tiles.
+- Sets without a file keep the CGA colours, and so do text and the title picture.
+- The game still plays on its own 4-colour pictures, so changing a sprite's shape changes how
+  it looks, not where you collide with it. The unedited files look exactly like palette 0.
+The command line overrides the file: `--set display.palette=1`, for example. F1-F5 and F11
 change the display settings for the current run only.
 
 ### Command line
@@ -219,7 +256,8 @@ example, `--script "wait 70; down right; wait 18; up right; shot a.png; quit"`.
 | `wait N` | wait N ticks |
 | `down KEY` / `up KEY` | press / release a key |
 | `tap KEY` | press a key for one tick |
-| `shot FILE.png` | save a screenshot |
+| `shot FILE.png` | save a screenshot of the game's own 4-colour screen |
+| `view FILE.png` | save what the window shows (with `display.smooth` / `display.sprites`) |
 | `mouse X Y` / `click X Y` | move the mouse / click, in 320x200 screen pixels |
 | `player X Y` | put the player at X, Y (Y is their bottom row), in a level |
 | `jump` | start a jump from where the player is, even in mid-air |

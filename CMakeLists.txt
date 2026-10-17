@@ -20,6 +20,8 @@ add_executable(ptomb
     src/hiscore.c
     src/menu.c
     src/cga.c
+    src/render.c
+    src/png.c
     src/graph3.c
     src/lzexe.c
     src/gamedata.c

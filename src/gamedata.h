@@ -14,6 +14,8 @@
 #define MAX_LEVELS 20
 #define SPRITE_SETS 40
 #define SPRITE_FRAMES 4
+#define SPRITE_SET_BYTES 0x270  /* a set: 4 slots */
+#define SPRITE_SLOT_BYTES 0x9C  /* a frame's slot (room for 24x24) */
 
 typedef struct {
     uint8_t *image;          /* load module, unrelocated */

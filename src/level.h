@@ -17,6 +17,9 @@ typedef struct {
     int dx, dy; /* +08 / +0A */
     int type;   /* +0C 1..10 */
     bool free;  /* +11 */
+    /* port (display.smooth): the picture last drawn for it and where, NULL if none */
+    const uint8_t *shown;
+    int shown_x, shown_y;
 } enemy_t;
 
 typedef struct {

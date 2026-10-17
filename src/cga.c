@@ -5,6 +5,10 @@
 #include <string.h>
 
 uint8_t cga_vram[CGA_H * CGA_STRIDE];
+uint8_t cga_tag[CGA_H * CGA_W];
+uint16_t cga_tagpos[CGA_H * CGA_W];
+uint8_t cga_cur_tag;
+uint16_t cga_cur_pos;
 
 static const rgb_t palettes[2][2][4] = {
     { /* palette 0 */
@@ -20,6 +24,7 @@ static const rgb_t palettes[2][2][4] = {
 void cga_clear(void)
 {
     memset(cga_vram, 0, sizeof cga_vram);
+    memset(cga_tag, TAG_NONE, sizeof cga_tag);
 }
 
 const rgb_t *cga_palette(int palette, int bright)
@@ -80,7 +85,23 @@ int cga_write_png(const char *path, const rgb_t *pal, int scale)
 {
     if (scale < 1)
         scale = 1;
-    const uint32_t w = CGA_W * scale, h = CGA_H * scale;
+    const int w = CGA_W * scale, h = CGA_H * scale;
+    uint32_t *px = malloc((size_t)w * h * sizeof *px);
+    if (!px)
+        return -1;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const rgb_t c = pal[cga_get(x / scale, y / scale)];
+            px[y * w + x] = 0xFF000000u | (uint32_t)c.r << 16 | (uint32_t)c.g << 8 | c.b;
+        }
+    const int rc = png_write_argb(path, px, w, h);
+    free(px);
+    return rc;
+}
+
+int png_write_argb(const char *path, const uint32_t *px, int width, int height)
+{
+    const uint32_t w = (uint32_t)width, h = (uint32_t)height;
     const size_t row = 1 + (size_t)w * 3, raw_len = row * h;
 
     uint8_t *raw = malloc(raw_len);
@@ -90,8 +111,8 @@ int cga_write_png(const char *path, const rgb_t *pal, int scale)
         uint8_t *p = raw + y * row;
         *p++ = 0; /* filter: none */
         for (uint32_t x = 0; x < w; x++) {
-            const rgb_t c = pal[cga_get((int)(x / scale), (int)(y / scale))];
-            *p++ = c.r; *p++ = c.g; *p++ = c.b;
+            const uint32_t c = px[y * w + x];
+            *p++ = (uint8_t)(c >> 16); *p++ = (uint8_t)(c >> 8); *p++ = (uint8_t)c;
         }
     }
 

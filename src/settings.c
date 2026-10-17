@@ -6,7 +6,7 @@
 
 settings_t settings;
 
-typedef enum { T_BOOL, T_INT, T_PRESET } type_t;
+typedef enum { T_BOOL, T_INT, T_PRESET, T_STR } type_t;
 
 /* Every setting, with its value in each preset. Rows of one section stay together (the
  * written file follows this order). */
@@ -14,7 +14,7 @@ static const struct {
     const char *key;   /* section.name */
     type_t type;
     size_t offset;     /* in settings_t */
-    int lo, hi;        /* T_INT range */
+    int lo, hi;        /* T_INT range; T_STR: hi = the char array's size */
     int classic, enhanced;
     const char *help;
 } table[] = {
@@ -28,6 +28,15 @@ static const struct {
      "stretch to 4:3, as a CRT showed it (off = square pixels). F3 switches"},
     {"display.fullscreen", T_BOOL, offsetof(settings_t, fullscreen), 0, 1, 0, 0,
      "start in fullscreen. F11 or Alt+Enter switches"},
+    {"display.smooth", T_BOOL, offsetof(settings_t, smooth), 0, 1, 0, 1,
+     "smooth movement: things glide between the game's steps (18 a second), shown at the\n"
+     "; monitor's refresh rate. Only the picture changes; the game runs as before. F5 switches"},
+    {"display.sprites", T_BOOL, offsetof(settings_t, sprites), 0, 1, 0, 1,
+     "custom graphics: draw sprites from PNGs in sprite_dir (same layout as the ones\n"
+     "; tools/extract_gfx.py writes, any zoom) where there are any. F4 switches"},
+    {"display.sprite_dir", T_STR, offsetof(settings_t, sprite_dir), 0, (int)sizeof settings.sprite_dir, 0, 0,
+     "folder of setNN.png / setNN_dsXXXX.png sprite files, checked in a volN subfolder first;\n"
+     "; a relative path is next to ptomb.exe"},
     {"input.joystick", T_BOOL, offsetof(settings_t, joystick), 0, 1, 1, 1,
      "start with the joystick (game controller) on; the original started with it off"},
     {"gameplay.solid_pickups", T_BOOL, offsetof(settings_t, solid_pickups), 0, 1, 1, 0,
@@ -47,10 +56,20 @@ static int *field(size_t i)
     return (int *)((char *)&settings + table[i].offset);
 }
 
+/* A T_STR setting's value, the same in both presets. */
+static const char *str_default(size_t i)
+{
+    return table[i].offset == offsetof(settings_t, sprite_dir) ? "sprites" : "";
+}
+
 void settings_reset(preset_t preset)
 {
-    for (size_t i = 0; i < N_SETTINGS; i++)
-        *field(i) = preset == PRESET_ENHANCED ? table[i].enhanced : table[i].classic;
+    for (size_t i = 0; i < N_SETTINGS; i++) {
+        if (table[i].type == T_STR)
+            snprintf((char *)field(i), (size_t)table[i].hi, "%s", str_default(i));
+        else
+            *field(i) = preset == PRESET_ENHANCED ? table[i].enhanced : table[i].classic;
+    }
     settings.preset = (int)preset;
 }
 
@@ -80,6 +99,14 @@ int settings_set(const char *key, const char *value, char *err, size_t errlen)
     for (size_t i = 0; i < N_SETTINGS; i++) {
         if (strcmp(key, table[i].key) != 0)
             continue;
+        if (table[i].type == T_STR) {
+            if (strlen(value) >= (size_t)table[i].hi) {
+                snprintf(err, errlen, "%s is too long", key);
+                return -1;
+            }
+            snprintf((char *)field(i), (size_t)table[i].hi, "%s", value);
+            return 0;
+        }
         int v = -1;
         switch (table[i].type) {
         case T_BOOL:
@@ -87,6 +114,8 @@ int settings_set(const char *key, const char *value, char *err, size_t errlen)
             break;
         case T_PRESET:
             v = settings_preset_by_name(value);
+            break;
+        case T_STR:
             break;
         case T_INT: {
             char *end;
@@ -183,8 +212,12 @@ void settings_write(FILE *f)
             snprintf(section, sizeof section, "%.*s", slen, table[i].key);
             fprintf(f, "\n[%s]\n", section);
         }
-        const int v = *field(i);
         fprintf(f, "; %s\n%s = ", table[i].help, dot + 1);
+        if (table[i].type == T_STR) {
+            fprintf(f, "%s\n", (const char *)field(i));
+            continue;
+        }
+        const int v = *field(i);
         if (table[i].type == T_BOOL)
             fprintf(f, "%s\n", v ? "on" : "off");
         else if (table[i].type == T_PRESET)

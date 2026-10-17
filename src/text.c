@@ -44,9 +44,12 @@ void text_putc(int ch)
         static const uint8_t blank[8];
         const uint8_t *glyph = ch < 0x80 ? font8x8_glyph(ch) : high_font ? high_font + (ch - 0x80) * 8 : blank;
         const int x0 = (cur_col - 1) * 8, y0 = (cur_row - 1) * 8;
+        const uint8_t old_tag = cga_cur_tag;
+        cga_cur_tag = TAG_TEXT;
         for (int r = 0; r < 8; r++)
             for (int c = 0; c < 8; c++)
                 cga_set(x0 + c, y0 + r, (glyph[r] & (0x80 >> c)) ? (cur_color & 3) : 0);
+        cga_cur_tag = old_tag;
     }
     cur_col++;
 }

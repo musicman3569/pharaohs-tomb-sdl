@@ -6,6 +6,7 @@
 #include "gamepad.h"
 #include "graph3.h"
 #include "platform.h"
+#include "render.h"
 #include "settings.h"
 #include "sound.h"
 #include "text.h"
@@ -222,7 +223,7 @@ static void overlay_pic(const uint8_t *p, int px, int py, int x0, int y0, int x1
         for (int x = x0 > px ? x0 : px; x <= x1 && x <= px + 15; x++) {
             const int c = pic_color(p, px, py, x, y);
             if (c)
-                g3_plot(x, y, c);
+                g3_plot_pic_pixel(p, x - px, y - (py - 15), x, y, c);
         }
 }
 
@@ -253,6 +254,38 @@ static void restore_overlaps(int x0, int y0, int x1, int y1)
         overlay_pic(player_shown, shown_x, shown_y, x0, y0, x1, y1);
 }
 
+/* display.smooth: what moves on screen, for render.c. Only while the screen shows a level (or
+ * the title demo): not during the level title, game over or the volume ending. */
+static bool scene_valid;
+
+static int scene(scene_obj_t *out, int max)
+{
+    int n = 0;
+    if (!scene_valid)
+        return 0;
+    for (int i = 1; i <= MAX_ENEMIES && n < max; i++) {
+        const enemy_t *e = &G.lv.enemy[i];
+        if (playing && !e->free && e->shown && e->type >= 1 && e->type <= 8)
+            out[n++] = (scene_obj_t){.id = i, .pic = e->shown, .x = e->shown_x, .y = e->shown_y};
+    }
+    if (playing && G.shot && n < max) /* the spear: an 8-px line (9 pixels, Draw includes both ends) */
+        out[n++] = (scene_obj_t){.id = 11, .x = G.shot_x, .y = G.shot_y, .w = 9, .color = 1};
+    if (playing && G.dart_r && n < max)
+        out[n++] = (scene_obj_t){.id = 12, .x = G.dart_rx, .y = G.dart_ry, .w = 1, .color = 1};
+    if (playing && G.dart_l && n < max)
+        out[n++] = (scene_obj_t){.id = 13, .x = G.dart_lx, .y = G.lv.glint_x[0], .w = 1, .color = 1};
+    if (player_shown && n < max) /* last, on top */
+        out[n++] = (scene_obj_t){.id = 0, .pic = player_shown, .x = shown_x, .y = shown_y};
+    return n;
+}
+
+static void scene_show(bool valid)
+{
+    scene_valid = valid;
+    render_set_scene(scene);
+    render_scene_reset();
+}
+
 /* Draw the explorer (one of his sets) where he is. */
 static void player_pic(int set, int frame)
 {
@@ -263,9 +296,18 @@ static void player_pic(int set, int frame)
     restore_overlaps(G.px, G.py - 15, G.px + 15, G.py);
 }
 
-/* After MoveEnemies draws a deadly enemy. */
-static void enemy_drawn(const enemy_t *e)
+/* After MoveEnemies draws an enemy: what's on screen now (display.smooth). */
+static void enemy_shown(enemy_t *e, const uint8_t *p)
 {
+    e->shown = p;
+    e->shown_x = e->x;
+    e->shown_y = e->y;
+}
+
+/* After MoveEnemies draws a deadly enemy. */
+static void enemy_drawn(enemy_t *e, const uint8_t *p)
+{
+    enemy_shown(e, p);
     restore_overlaps(e->x, e->y - 15, e->x + 15, e->y);
 }
 
@@ -630,6 +672,7 @@ static void kill_player(void)
     G.loop_r = 12; /* end any tile-map loop in progress */
     G.loop_c = 20;
     if (G.lives < 0) {
+        scene_show(false);
         pad_set_mode(PAD_MENU); /* the name entry and the screens after it (game_play resets it) */
         menu_game_over(G.score); /* GameOver (1000:3336): high score entry */
         game_over_screen();
@@ -893,6 +936,7 @@ static void touch_tile(int x, int y)
         if (G.level > G.data->num_levels) {
             /* VolumeEnding (1854:4E01), then GameOver (1000:3336): the high-score entry, which
              * also sets the quit and game-over flags. No "G A M E  O V E R" frame here. */
+            scene_show(false);
             pad_set_mode(PAD_MENU); /* game_play sets it back when it returns */
             menu_volume_ending(G.data->volume);
             menu_game_over(G.score);
@@ -987,6 +1031,7 @@ static void spear_test(enemy_t *e)
                 plat_delay(1);
             }
             e->free = true; /* first, so blank() doesn't put it back */
+            e->shown = NULL;
             blank(e->x, e->y);
             e->x = -32;
             draw_status_bar();
@@ -1034,6 +1079,7 @@ static void move_enemies(void)
             else
                 e->dx = -e->dx;
             pic(SET_PLATFORM, 0, e->x, e->y);
+            enemy_shown(e, gamedata_sprite(G.data, SET_PLATFORM, 0));
             if (player_x_overlaps(e) && e->y - 16 == G.py) { /* carry the player */
                 G.on_platform = true;
                 const int m = e->speed * e->dx;
@@ -1058,7 +1104,7 @@ static void move_enemies(void)
                     e->x += e->speed * e->dx;
                 }
                 level_draw_monster(G.data, G.level, e->frame, e->x, e->y);
-                enemy_drawn(e);
+                enemy_drawn(e, level_monster_pic(G.data, G.level, e->frame));
             }
             break;
 
@@ -1076,6 +1122,7 @@ static void move_enemies(void)
                     plat_delay(0);
                     plat_nosound();
                     pic(SET_BLOCK, 3, e->x, e->y);
+                    enemy_shown(e, gamedata_sprite(G.data, SET_BLOCK, 3));
                 }
             }
             break;
@@ -1093,7 +1140,7 @@ static void move_enemies(void)
                     e->y -= 1;
                 }
                 pic(SET_VHAZARD, e->type == 4 ? 1 : 3, e->x, e->y);
-                enemy_drawn(e);
+                enemy_drawn(e, gamedata_sprite(G.data, SET_VHAZARD, e->type == 4 ? 1 : 3));
             }
             break;
 
@@ -1104,6 +1151,7 @@ static void move_enemies(void)
                 if (dot(nx, ny + 1) == 0 && ny > 36) {
                     e->y += e->speed * e->dy;
                     pic(SET_ELEVATOR, 3, e->x, e->y);
+                    enemy_shown(e, gamedata_sprite(G.data, SET_ELEVATOR, 3));
                     if (player_x_overlaps(e) && between(G.py, e->y - 16, e->y)) {
                         G.on_platform = true;
                         G.py += e->speed * e->dy;
@@ -1125,7 +1173,7 @@ static void move_enemies(void)
                 if (enemy_dot(e->x, ny + 1) == 0 && enemy_dot(e->x, ny - 18) == 0) {
                     e->y += e->speed * e->dy;
                     pic(SET_TALL_HAZARD, 2, e->x, e->y);
-                    enemy_drawn(e);
+                    enemy_drawn(e, gamedata_sprite(G.data, SET_TALL_HAZARD, 2));
                 } else {
                     e->dy = -e->dy;
                 }
@@ -1146,7 +1194,7 @@ static void move_enemies(void)
                     e->x += e->speed * e->dx;
                 }
                 pic(SET_BAT, e->frame - 1, e->x, e->y);
-                enemy_drawn(e);
+                enemy_drawn(e, gamedata_sprite(G.data, SET_BAT, e->frame - 1));
             }
             break;
 
@@ -1541,6 +1589,7 @@ void game_play(int level, bool cheat)
     }
     pad_set_mode(old_mode);
     playing = false;
+    scene_show(false);
 }
 
 void game_title_demo(const gamedata_t *data, int key_layout)
@@ -1549,6 +1598,8 @@ void game_title_demo(const gamedata_t *data, int key_layout)
      * PlayerWalk and PlayerJumpStep, so the picture's pixels are the floor and walls) until a
      * key is pressed or about 300 steps have passed. */
     game_reset_state(data, key_layout);
+    player_shown = NULL;
+    scene_show(true);
     G.px = 160;
     G.py = 98;
     G.jumping = false;
@@ -1575,8 +1626,10 @@ void game_title_demo(const gamedata_t *data, int key_layout)
             player_jump_step(G.jump_steps < 16 ? -1 : 1);
         } while (G.py != 98 && !plat_key_pressed() && !plat_quitting());
         G.jumping = false;
-        if (plat_key_pressed() || plat_quitting() || steps > 300)
+        if (plat_key_pressed() || plat_quitting() || steps > 300) {
+            scene_show(false);
             return;
+        }
     }
 }
 
@@ -1611,6 +1664,7 @@ static void snapshot_for_save(int level)
 
 void game_start_level(int level)
 {
+    scene_show(false);
     snapshot_for_save(level);
     g3_graph_color_mode();
     text_draw_frame(G.data, 3, 5, 10, 35, 14);
@@ -1655,4 +1709,5 @@ void game_start_level(int level)
         shown_y = G.py;
     }
     draw_status_bar();
+    scene_show(true);
 }

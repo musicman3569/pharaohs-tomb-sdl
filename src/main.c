@@ -9,7 +9,7 @@
  *
  * In game: Left/Right walk, Space jump, Z X C V B N M , . / F throw a spear, P pause,
  * E sound on/off, Q or Esc quit (then Y). Port extras: PgUp/PgDn change level, F1 palette,
- * F2 intensity, F3 aspect correction, F12 screenshot. */
+ * F2 intensity, F3 aspect correction, F4 custom sprites, F5 smooth movement, F12 screenshot. */
 #include <SDL.h>
 
 #include <stdio.h>
@@ -20,10 +20,12 @@
 #include "gamepad.h"
 #include "game.h"
 #include "gamedata.h"
+#include "graph3.h"
 #include "level.h"
 #include "menu.h"
 #include "platform.h"
 #include "platform_sdl.h"
+#include "render.h"
 #include "settings.h"
 #include "sound.h"
 
@@ -228,6 +230,13 @@ int main(int argc, char **argv)
     if (gamedata_load(&data, opt.exe_path, err, sizeof err) != 0) {
         fail(err);
         return 1;
+    }
+    /* the sprite table at DS:0000, so the display can tell which sprite drew each pixel */
+    g3_tag_sprites(data.ds, SPRITE_SET_BYTES, SPRITE_SLOT_BYTES, SPRITE_SETS, SPRITE_FRAMES);
+    if (!opt.debug_exe && !opt.screenshot) { /* custom sprite art (display.sprites) */
+        char *base = SDL_GetBasePath();
+        render_load_sprites(settings.sprite_dir, base ? base : "", data.volume);
+        SDL_free(base);
     }
     if (opt.debug_exe) {
         debug_exe(&data);

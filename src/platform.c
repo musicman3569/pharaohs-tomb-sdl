@@ -9,6 +9,7 @@
 #include "cga.h"
 #include "gamepad.h"
 #include "platform_sdl.h"
+#include "render.h"
 #include "settings.h"
 #include "timer.h"
 
@@ -180,20 +181,112 @@ static SDL_Rect fit_rect(int win_w, int win_h)
     return r;
 }
 
+/* display.smooth / display.sprites: pictures of moving things as textures, made on first use
+ * and rebuilt when the colours change. */
+static struct {
+    const uint8_t *pic;
+    SDL_Texture *tex;
+} pic_cache[256];
+static int pic_cache_n;
+static unsigned pic_cache_style;
+
+static SDL_Texture *pic_texture(const uint8_t *pic)
+{
+    if (pic_cache_style != render_style()) {
+        for (int i = 0; i < pic_cache_n; i++)
+            SDL_DestroyTexture(pic_cache[i].tex);
+        pic_cache_n = 0;
+        pic_cache_style = render_style();
+    }
+    for (int i = 0; i < pic_cache_n; i++)
+        if (pic_cache[i].pic == pic)
+            return pic_cache[i].tex;
+    if (pic_cache_n == (int)(sizeof pic_cache / sizeof pic_cache[0]))
+        return NULL;
+    int w, h;
+    const uint32_t *px = render_pic_argb(pic, &w, &h);
+    SDL_Texture *t = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, w, h);
+    if (!t)
+        return NULL;
+    SDL_UpdateTexture(t, NULL, px, w * 4);
+    SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+    pic_cache[pic_cache_n].pic = pic;
+    pic_cache[pic_cache_n++].tex = t;
+    return t;
+}
+
+static double seconds_now(void)
+{
+    return (double)SDL_GetPerformanceCounter() / (double)perf_freq;
+}
+
+static bool display_layer(void)
+{
+    return settings.smooth || render_custom();
+}
+
+/* The display layer's background, at the custom art's scale (render.h). */
+static SDL_Texture *bg_tex;
+static int bg_tex_scale;
+
 static void present(void)
 {
-    void *pixels;
-    int pitch;
-    if (SDL_LockTexture(tex, NULL, &pixels, &pitch) == 0) {
-        cga_to_argb(pixels, pitch / 4, cga_palette(settings.palette, settings.bright));
-        SDL_UnlockTexture(tex);
+    /* display.smooth times its frames itself (plat_pace draws between game passes), so a
+     * present mustn't block until vsync. On Windows the compositor still keeps it tear-free in
+     * a window and in (desktop) fullscreen. */
+    static int vsync = 1;
+    if (vsync != !settings.smooth) {
+        vsync = !settings.smooth;
+        SDL_RenderSetVSync(ren, vsync);
+    }
+    const render_out_t *f = NULL;
+    SDL_Texture *shown = tex;
+    if (display_layer()) {
+        f = render_frame(seconds_now());
+        if (f->bg && (!bg_tex || bg_tex_scale != f->scale)) {
+            if (bg_tex)
+                SDL_DestroyTexture(bg_tex);
+            bg_tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+                                       CGA_W * f->scale, CGA_H * f->scale);
+            bg_tex_scale = f->scale;
+            if (bg_tex)
+                SDL_UpdateTexture(bg_tex, NULL, f->bg, CGA_W * f->scale * 4);
+        } else if (f->bg && f->bg_changed) {
+            SDL_UpdateTexture(bg_tex, NULL, f->bg, CGA_W * f->scale * 4);
+        }
+        if (bg_tex)
+            shown = bg_tex;
+    } else {
+        void *pixels;
+        int pitch;
+        if (SDL_LockTexture(tex, NULL, &pixels, &pitch) == 0) {
+            cga_to_argb(pixels, pitch / 4, cga_palette(settings.palette, settings.bright));
+            SDL_UnlockTexture(tex);
+        }
     }
     int ow, oh;
     SDL_GetRendererOutputSize(ren, &ow, &oh);
     const SDL_Rect dst = fit_rect(ow, oh);
     SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
     SDL_RenderClear(ren);
-    SDL_RenderCopy(ren, tex, NULL, &dst);
+    SDL_RenderCopy(ren, shown, NULL, &dst);
+    const float sx = (float)dst.w / CGA_W, sy = (float)dst.h / CGA_H;
+    for (int i = 0; f && shown == bg_tex && i < f->n_items; i++) { /* moving things, at fractional positions */
+        const render_item_t *it = &f->items[i];
+        const SDL_FRect r = {(float)dst.x + it->x * sx, (float)dst.y + it->y * sy, it->w * sx, it->h * sy};
+        if (it->kind == ITEM_PIC) {
+            SDL_Texture *t = pic_texture(it->pic);
+            if (t)
+                SDL_RenderCopyF(ren, t, NULL, &r);
+        } else if (it->kind == ITEM_LINE) {
+            const uint32_t c = render_line_argb(it->color);
+            SDL_SetRenderDrawColor(ren, (Uint8)(c >> 16), (Uint8)(c >> 8), (Uint8)c, 255);
+            SDL_RenderFillRectF(ren, &r);
+        } else { /* ITEM_STRIP: one background row stretched (a pole) */
+            const SDL_Rect src = {it->sx * f->scale, it->sy * f->scale + f->scale - 1, it->sw * f->scale, 1};
+            SDL_RenderCopyF(ren, bg_tex, &src, &r);
+        }
+    }
     SDL_RenderPresent(ren);
 
     if (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN_DESKTOP)
@@ -208,6 +301,19 @@ static void present(void)
         SDL_SetWindowTitle(win, title);
         title_dirty = false;
     }
+}
+
+/* A screenshot of what the window shows: at twice 320x200, or the custom art's scale. Without
+ * the display layer that's the framebuffer as before. */
+static int save_shot(const char *path)
+{
+    if (!display_layer())
+        return cga_write_png(path, cga_palette(settings.palette, settings.bright), 2);
+    int w, h;
+    uint32_t *px = render_compose(seconds_now(), &w, &h);
+    const int rc = px ? png_write_argb(path, px, w, h) : -1;
+    free(px);
+    return rc;
 }
 
 void plat_status(const char *text)
@@ -331,10 +437,12 @@ static void key_down(const SDL_KeyboardEvent *k)
     case SDLK_F1: settings.palette ^= 1; return; /* for this run; ptomb.ini isn't changed */
     case SDLK_F2: settings.bright ^= 1; return;
     case SDLK_F3: settings.aspect_43 ^= 1; return;
+    case SDLK_F4: settings.sprites ^= 1; return;
+    case SDLK_F5: settings.smooth ^= 1; return;
     case SDLK_F12: {
         char name[64];
         snprintf(name, sizeof name, "ptomb_shot%02d.png", shot_no++);
-        if (cga_write_png(name, cga_palette(settings.palette, settings.bright), 2) == 0)
+        if (save_shot(name) == 0)
             printf("saved %s\n", name);
         return;
     }
@@ -395,7 +503,8 @@ shift_keys_t plat_shift_keys(void)
 /* --- scripted input (--script) ------------------------------------------------------------- */
 
 /* Commands separated by ';', timed in timer ticks (18.2 per second):
- *   wait N | down KEY | up KEY | tap KEY | shot FILE.png | mouse X Y | click X Y | quit
+ *   wait N | down KEY | up KEY | tap KEY | shot FILE.png | view FILE.png | mouse X Y | click X Y | quit
+ * (shot saves the framebuffer, view what the window shows)
  * (mouse and click are in 320x200 screen pixels)
  * KEY is left, right, up, down, space, esc, enter, pgup, pgdn, f11, or a single character, or a control on a
  * virtual game controller: pad_a, pad_b, pad_x, pad_start, pad_back, pad_left, ... (gamepad.h). */
@@ -475,6 +584,9 @@ static void run_script(void)
         } else if (!strcmp(cmd, "shot")) {
             if (cga_write_png(arg, cga_palette(settings.palette, settings.bright), 2) == 0)
                 printf("[tick %u] saved %s  %s\n", tick_total, arg, status_text);
+        } else if (!strcmp(cmd, "view")) { /* what the window shows (display.smooth / sprites) */
+            if (save_shot(arg) == 0)
+                printf("[tick %u] saved %s  %s\n", tick_total, arg, status_text);
         } else if (!strcmp(cmd, "mouse") || !strcmp(cmd, "click")) {
             mouse_x = mx;
             mouse_y = my;
@@ -490,7 +602,20 @@ static void run_script(void)
 
 /* --- main pump ----------------------------------------------------------------------------- */
 
-void plat_poll(void)
+static int refresh_hz(void)
+{
+    SDL_DisplayMode m;
+    if (SDL_GetWindowDisplayMode(win, &m) == 0 && m.refresh_rate >= 30)
+        return m.refresh_rate > 360 ? 360 : m.refresh_rate;
+    return 60;
+}
+
+/* may_present: whether a frame may be drawn now if one is due. With display.smooth, frames come
+ * at the monitor's rate and the wait for vsync can take most of one. GameTick polls in the middle
+ * of a pass (KeyPressed), and a wait there would let timer ticks land between the pass's
+ * counter checks, so the game would play differently. There it only draws if frames have
+ * stopped coming from anywhere else (a menu loop that does nothing but poll). */
+static void poll(bool may_present)
 {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
@@ -521,7 +646,10 @@ void plat_poll(void)
     if (script_pos || script_tap_pending)
         run_script();
 
-    if ((double)(now - last_present) / (double)perf_freq >= 1.0 / 60.0) {
+    /* 60 frames a second, or with smooth movement the monitor's own rate (vsync paces it) */
+    const double since = (double)(now - last_present) / (double)perf_freq;
+    if (settings.smooth ? (may_present && since >= 0.97 / refresh_hz()) || since >= 1.0 / 30.0
+                        : since >= 1.0 / 60.0) {
         last_present = now;
         present();
     }
@@ -532,9 +660,14 @@ bool plat_quitting(void)
     return quitting;
 }
 
+void plat_poll(void)
+{
+    poll(true);
+}
+
 bool plat_key_pressed(void)
 {
-    plat_poll();
+    poll(false);
     return key_head != key_tail;
 }
 
@@ -579,8 +712,15 @@ void plat_pace(int hz)
     next += period;
     while (now < next && !quitting) {
         const Uint64 left_ms = (next - now) * 1000 / perf_freq;
-        SDL_Delay(left_ms > 1 ? (Uint32)(left_ms - 1) : 0);
-        plat_poll();
+        Uint32 sleep_ms = left_ms > 1 ? (Uint32)(left_ms - 1) : 0;
+        if (settings.smooth && sleep_ms > 1)
+            sleep_ms = 1; /* wake for every frame at the monitor's rate, not just each pass */
+        SDL_Delay(sleep_ms);
+        /* With display.smooth, draw a frame only if it's done before the next pass is due: a
+         * late pass would see the timer differently and play differently. */
+        now = SDL_GetPerformanceCounter();
+        poll(!settings.smooth ||
+             (now < next && (double)(next - now) / (double)perf_freq > 0.003));
         now = SDL_GetPerformanceCounter();
     }
 }

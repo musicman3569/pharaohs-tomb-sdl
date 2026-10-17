@@ -448,6 +448,7 @@ GameTick (1000:4f69), once per frame
 | `game.c` | GameTick, PlayerWalk, PlayerMoveHorizontal, PlayerJumpStep, PlayerFire, MoveShot, TouchTile, KillPlayer, AddTreasure, status-bar bonuses, ShowLevelTitle |
 | `platform.c` | keyboard ISR flags, BIOS key buffer (ReadKey / KeyPressed), shift flags, Delay, PC speaker, SDL window, `--script` test input |
 | `main.c` | options and the game loop (GameTick at a fixed 70 Hz) |
+| `render.c`, `png.c` | port only: the display layer (smooth movement, custom sprites); see "The display layer" |
 
 Verified: `--screenshot` renders from the packed originals match `tools/render_levels.py`
 pixel for pixel, except the random `X` frames and the `q` tiles (the Python tool doesn't do the
@@ -720,3 +721,55 @@ puts back the non-black pixels it covered: spike tiles (and pickups when `solid_
 then deadly enemies, then the explorer, so he stays on top. All of those pixels are already
 ignored by the movement checks that could meet them (`player_dot`, `enemy_dot`), so play is
 unchanged: sequential runs give identical traces with and without it.
+
+## The display layer (smooth movement and custom sprites)
+
+Two port enhancements change only what the window shows (`render.c`, `display.smooth` and
+`display.sprites`, both on in enhanced). The 2 bpp framebuffer stays exactly what the original
+would have on screen, because collision reads it back.
+
+**Smooth movement.** Everything moves on the 18.2 Hz timer counters, 1-4 px a step (walking 2,
+jumping 4 per tick of `[7F6E]`, enemies `speed` per tick of `[7F6C]`, spear and darts 4). For
+each frame, game.c's `scene()` lists what moves, as it was last drawn: enemy types 1-8 (the
+picture and position MoveEnemies last drew, kept in `enemy_t.shown*`, starting with the tile
+DrawLevelRow drew, which isn't always the spawn position: `l` spawns 1 px low and `n` 3 px), the
+spear (a 9-pixel line, Draw includes both ends), the two darts, and the explorer
+(`player_shown`, last). Only while a level is up: not during the level title, game over or the
+volume ending; the title demo's explorer is included. render.c checks each one is really there
+(at least 3/4 of its pixels carry its tag and place, see below; a line, of its colour), takes
+those pixels out of a copy of the framebuffer, and draws the pictures over it, black
+see-through, at a position that glides from where it shows to where it was drawn over 1.15
+timer ticks (a little over one step, so steady movement never pauses between steps). Moves over
+12 px (a restart) jump. The window draws them as textures at fractional positions, so the glide
+is smooth at the window's resolution.
+
+**Poles.** The vertical hazards (types 4, 5) hang from a pole that is nothing but their top row
+left behind in the framebuffer as they move down (the elevator's stands on its bottom row the
+same way). Gliding, a rising hazard shows up to a step lower than where it was drawn, so it
+came away from its pole by a pixel or two, flickering. `bridge_poles` finds the columns where
+the pixel next to the picture's facing edge matches that edge, and stretches that background
+row over the gap, under the picture.
+
+Frames are drawn at the monitor's rate with vsync off (on Windows the compositor keeps a
+window or desktop fullscreen tear-free). They are only drawn between GameTick passes, and only
+if done before the next pass is due: a frame or a vsync wait inside a pass (GameTick's
+KeyPressed polls) let timer ticks land between the pass's counter checks, and scripted runs then
+played differently from run to run. With that, runs with the display on and off give identical
+state traces.
+
+**Custom sprites.** Every `cga_set` also stores what drew the pixel (`cga_tag`): a sprite
+(set * 4 + frame + 1, found by Graph3 from the picture's address in the sprite table), text,
+Plot / Draw lines, or the title PCX; and for a sprite, which of its pixels it is (`cga_tagpos`,
+column | row from the top << 8). GetPic keeps both for what it copies, so PutPic of that buffer
+(the sliding exit door) puts them back, and the pixel_hits overlay plots them too. With custom
+art loaded (`render_load_sprites`: one PNG per set in `extract_gfx.py`'s layout, 4 frames in
+24x24 cells with a 1-px grid, any whole zoom 1-8, read by `png.c`), the background is built at
+the largest zoom: a sprite pixel shows the matching zoom x zoom block of its custom picture,
+everything else its CGA colour. Black margins included, as PutPic draws them, so a tile's whole
+cell is the custom art. Moving pictures come from the same art, transparent where the file is
+(or black, if it has no transparency). The background is only rebuilt when the framebuffer,
+its tags or the colours change (about 1 frame in 9 in play). Taking a moving picture out by tag
+and place rather than colour also removes its black margin, so art drawn into a sprite's
+margin never leaves a copy behind at the game's position.
+
+The unedited extracted pal0 files render pixel-identical to palette 0 at 4x.

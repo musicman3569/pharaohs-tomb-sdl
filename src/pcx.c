@@ -69,12 +69,16 @@ void pcx_show_effect(const pcx_image_t *img, int variant, int delay, int type)
                 if (variant & 4) { sum += cy * 1000 / CGA_H; n++; }
                 if (variant & 8) { sum += (CGA_H - 1 - cy) * 1000 / CGA_H; n++; }
                 const int order = n ? sum / n : 0;
-                if (order < s * 1000 / steps)
+                if (order < s * 1000 / steps) {
+                    cga_cur_tag = TAG_PCX;
                     cga_set(x, y, px(img, x, y));
+                    cga_cur_tag = TAG_NONE;
+                }
             }
         plat_crt_delay(ms_per_step);
     }
     memcpy(cga_vram, img->pixels, sizeof img->pixels);
+    memset(cga_tag, TAG_PCX, sizeof cga_tag);
 }
 
 void pcx_show_random_effect(const pcx_image_t *img)

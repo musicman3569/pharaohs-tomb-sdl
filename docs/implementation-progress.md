@@ -189,7 +189,17 @@ difference):
    gravity / platform checks. Measured with the `player X Y`, `jump` and `state` script
    commands on volume 1 level 1's isolated gem (row 9, col 9): classic cut 11 of 24 jumps
    short (peak y 157-158 instead of 144), enhanced none; the gem was collected every time.
-2. Higher frame rate and smoother movement.
+2. ~~Higher frame rate and smoother movement.~~ Done, `display.smooth` (classic off, enhanced
+   on, F5), together with 6 as one display layer (`render.c`; notes.md, "The display layer").
+   The framebuffer stays the game's; game.c reports what moves (`scene()`: where each enemy,
+   the spear, the darts and the explorer were last drawn), render.c takes those out of a copy
+   of the framebuffer and draws them gliding over 1.15 timer ticks from where they show to
+   where they were drawn, at the monitor's rate (vsync off; Windows' compositor keeps it
+   tear-free). Measured: 131 frames/s on the user's 144 Hz monitor, a walk shown as ~0.25 px
+   steps instead of 2 px at 18 Hz. **Play is unchanged**: scripted runs give identical state
+   traces with the display on and off, in repeated runs (levels 1, 3, 9, 16); that needed
+   frames drawn only between game passes and only when done before the next is due (a vsync
+   wait or a frame inside a pass let timer ticks land mid-pass and changed the play).
 3. ~~Accurate hit detection. The current bounding boxes are too big an inaccurate.~~ Done,
    `gameplay.pixel_hits` (classic off, enhanced on; see notes.md, "Hit boxes vs pixels").
    Deaths (walkers, hazards, bats, darts, spikes) need the explorer's pixels to touch the
@@ -211,15 +221,30 @@ difference):
    elsewhere type Enter in PAD_MENU screens (`plat_menu_clicks` routes them to the menu while
    it's up). Classic keeps the original's Up = 'H' (high scores) quirk. Script commands
    `mouse X Y`, `click X Y` and the key `f11` test it.
-6. Graphics remaster from 3-color CGA to 256 colors
+6. ~~Graphics remaster from 3-color CGA to 256 colors~~: done as **custom sprite PNGs**,
+   `display.sprites` (classic off, enhanced on, F4) + `display.sprite_dir` (default `sprites`
+   next to ptomb.exe; `volN/` first). A first version shaded the original art procedurally from
+   a 256-colour palette; the user found it washed out and odd, so it was replaced. Now: files in
+   `extract_gfx.py`'s layout (per set, 101x26 times any zoom 1-8), read by the port's own PNG
+   reader (`png.c`, with inflate). Every `cga_set` stores which sprite drew the pixel and where
+   in it (`cga_tag` / `cga_tagpos`), so the background shows each framebuffer pixel from its
+   sprite's custom picture at the art's resolution. Verified: the unedited pal0 files render
+   pixel-identical to palette 0 (levels 1, 5, 16 and the title); an RGBA test pack using all
+   five PNG filters loads and shows its recolours and 4x detail. Text and the PCX keep the CGA
+   colours (possible follow-up: custom fonts / title picture).
+   Also fixed (reported by the user): the vertical hazards' poles came away from them while
+   rising with `display.smooth`, because the pole is the framebuffer trail above the drawn
+   position and the glide shows the hazard lower. `bridge_poles` stretches the pole's last row
+   over the gap; a per-tick check on level 3 found 222 gaps before and none after.
 
 ## How to work here (lessons from this session)
 
-- **Don't write C containing escapes (`\x9F`, `'\0'`, `'\\'`) through Bash heredocs or inline
-  Python.** The tool layer collapsed backslashes three times, producing NUL bytes and broken
+- **Don't write C containing escapes (`\x9F`, `'\0'`, `'\\'`, `"\n"`) through Bash heredocs or
+  inline Python.** The tool layer collapsed backslashes three times, producing NUL bytes and broken
   literals. Use the Write and Edit tools for source. (Python heredocs are fine for analysis.)
 - Test with `--script` (ticks are 18.2/s; commands `wait N; down KEY; up KEY; tap KEY;
-  shot FILE.png; mouse X Y; click X Y; quit`; keys `left right up down space esc enter pgup
+  shot FILE.png; view FILE.png; mouse X Y; click X Y; quit`; `shot` is the framebuffer,
+  `view` what the window shows; keys `left right up down space esc enter pgup
   pgdn f11`, `pad_*`, or one character).
   `--level N` skips the menus. Output paths are relative to the working directory, so run from
   a temp folder.

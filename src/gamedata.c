@@ -6,8 +6,6 @@
 
 #include "lzexe.h"
 
-#define SET_BYTES 0x270
-#define SLOT_BYTES 0x9C
 
 static unsigned rd16(const uint8_t *p)
 {
@@ -385,7 +383,7 @@ int gamedata_load(gamedata_t *g, const char *path, char *err, size_t errlen)
     }
 
     if (find_data_segment(g->image, g->image_len, &g->ds_seg) != 0 ||
-        g->ds_seg * 16u + SPRITE_SETS * SET_BYTES > g->image_len) {
+        g->ds_seg * 16u + SPRITE_SETS * SPRITE_SET_BYTES > g->image_len) {
         snprintf(err, errlen, "%s: can't locate the data segment", path);
         gamedata_free(g);
         return -1;
@@ -428,6 +426,6 @@ const uint8_t *gamedata_sprite(const gamedata_t *g, int set, int frame)
 {
     if (set < 0 || set >= SPRITE_SETS || frame < 0 || frame >= SPRITE_FRAMES)
         return NULL;
-    const uint8_t *p = g->ds + set * SET_BYTES + frame * SLOT_BYTES;
+    const uint8_t *p = g->ds + set * SPRITE_SET_BYTES + frame * SPRITE_SLOT_BYTES;
     return rd16(p) == 2 ? p : NULL;
 }

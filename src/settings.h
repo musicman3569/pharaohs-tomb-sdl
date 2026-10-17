@@ -11,6 +11,8 @@
  *   2. ptomb.ini next to ptomb.exe (or the --config file)
  *   3. the command line: --set section.key=value, and the older --palette / --bright
  *
+ * Settings are ints, except T_STR ones (sprite_dir), which are char arrays.
+ *
  * Adding an enhancement: add a field to settings_t, a row to the table in settings.c (classic
  * value = the original behaviour), and test `settings.field` where the behaviour changes. Keep
  * the classic path exactly as it was. */
@@ -30,6 +32,11 @@ typedef struct {
     int bright;     /* display.bright: high intensity */
     int aspect_43;  /* display.aspect: stretch to 4:3 as on a CRT */
     int fullscreen; /* display.fullscreen: start in fullscreen (F11 / Alt+Enter switch) */
+    int smooth;     /* display.smooth (enhancement): moving things glide between the game's
+                       steps, drawn at the monitor's refresh rate (render.h) */
+    int sprites;    /* display.sprites (enhancement): draw with custom sprite PNGs from
+                       sprite_dir where there are any (render.h) */
+    char sprite_dir[260]; /* display.sprite_dir: that folder; relative = next to ptomb.exe */
 
     /* input */
     int joystick;   /* input.joystick: start with the joystick (controller) switched on */

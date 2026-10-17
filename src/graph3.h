@@ -32,4 +32,13 @@ int g3_get_dot_color(int x, int y);
 void g3_plot(int x, int y, int color);
 void g3_draw(int x1, int y1, int x2, int y2, int color);
 
+/* Port extras for the display's per-pixel tags (cga_tag, used by render.c only).
+ * g3_tag_sprites tells Graph3 where the sprite table is (sets of set_bytes, frames of
+ * frame_bytes), so PutPic of a sprite tags its pixels with the sprite. GetPic remembers the
+ * tags it copied, so a PutPic of that buffer puts them back. */
+void g3_tag_sprites(const uint8_t *base, size_t set_bytes, size_t frame_bytes, int sets, int frames);
+int g3_pic_tag(const uint8_t *pic);         /* TAG_NONE if not a sprite */
+/* Plot pixel (col, row from the top) of picture `pic` at x, y: tagged as that picture's. */
+void g3_plot_pic_pixel(const uint8_t *pic, int col, int row, int x, int y, int color);
+
 #endif
