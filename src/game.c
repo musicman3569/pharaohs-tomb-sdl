@@ -809,8 +809,8 @@ static void touch_tile(int x, int y)
         sfx_pickup(G.sound_on);
         draw_status_bar();
         const int target = *cell + 1;
+        *cell = 0; /* before blank(), which puts back pickups still on the map (pixel_hits) */
         blank(cx, cy);
-        *cell = 0;
         crumble_or_build(cell, target, true);
         break;
     }
