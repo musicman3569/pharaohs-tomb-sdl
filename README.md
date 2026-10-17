@@ -214,6 +214,21 @@ python tools/extract_gfx.py sprites unpacked/PTOMB1.EXE build/sprites --palette 
 - Sets without a file keep the CGA colours, and so do text and the title picture.
 - The game still plays on its own 4-colour pictures, so changing a sprite's shape changes how
   it looks, not where you collide with it. The unedited files look exactly like palette 0.
+
+To redraw sets with an AI image editor, `tools/sprite_ai.py` converts both ways. `split` turns
+set files into 1024x1024 sheets of just the four frames (2x2, no padding or grid), which
+image-edit models handle far better than the wide strips. `join` reads an edited sheet at any
+size, scales each quadrant down to `--zoom` (default 2, twice the original pixels each way),
+makes near-black pixels transparent, and writes `setNN.png` into the sprites folder, where it
+takes precedence over the extracted `setNN_dsXXXX.png`:
+
+```
+python tools/sprite_ai.py split build/sprites --out build/sprites_ai/sheets
+python tools/sprite_ai.py join edited_set00.png --set 0 --out build/sprites
+```
+
+`--clip build/sprites/set00_ds0000.png` also clears anything outside the original sprite's
+pixels, so the new art can't spill past the shape the game collides with.
 The command line overrides the file: `--set display.palette=1`, for example. F1-F5 and F11
 change the display settings for the current run only.
 
