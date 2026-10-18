@@ -225,7 +225,9 @@ difference):
    `display.sprites` (classic off, enhanced on, F4) + `display.sprite_dir` (default `sprites`
    next to ptomb.exe; `volN/` first). A first version shaded the original art procedurally from
    a 256-colour palette; the user found it washed out and odd, so it was replaced. Now: files in
-   `extract_gfx.py`'s layout (per set, 101x26 times any zoom 1-8), read by the port's own PNG
+   a compact layout (per set, the 4 16x16 frames side by side, 64x16 times any zoom 1-8, as
+   `tools/sprite_custom.py` writes them from the EXE, `--scale N`; extract_gfx.py's padded
+   101x26 layout is still read too), read by the port's own PNG
    reader (`png.c`, with inflate). Every `cga_set` stores which sprite drew the pixel and where
    in it (`cga_tag` / `cga_tagpos`), so the background shows each framebuffer pixel from its
    sprite's custom picture at the art's resolution. Verified: the unedited pal0 files render
@@ -236,6 +238,15 @@ difference):
    rising with `display.smooth`, because the pole is the framebuffer trail above the drawn
    position and the glide shows the hazard lower. `bridge_poles` stretches the pole's last row
    over the gap; a per-tick check on level 3 found 222 gaps before and none after.
+   Later (user's sprites): custom art reaching into a sprite's black margin left a trail behind
+   moving things (the hat brim), because the strip a sprite moves off keeps its old tags. Art
+   now only shows on a black framebuffer pixel if at least half of its placement is still on
+   screen (notes.md, "Leftovers").
+7. ~~Spear sometimes not thrown~~ (reported by the user, both presets): an original bug.
+   PlayerFire facing right tests the 8 px past the spear's tip instead of its own pixels, so a
+   wall or monster 9-16 px ahead cancels the throw (level 1, landing beside the shaft).
+   `gameplay.spear_far_check` (classic on, enhanced off) mirrors the left-hand test. See
+   notes.md, "PlayerFire's check is lopsided".
 
 ## How to work here (lessons from this session)
 

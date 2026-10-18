@@ -605,8 +605,13 @@ static void player_fire(void)
     } else {
         G.shot_x = G.px + 16;
         G.shot_left = false;
+        /* The original checks 8 px past the tip here (1000:4E62 adds 8), while facing left it
+         * checks the spear's own pixels. So facing right you can't throw with a wall or a monster
+         * 9-16 px ahead: on level 1, landing next to the shaft, the spear just doesn't go. Port
+         * enhancement (gameplay.spear_far_check off): check the spear's own pixels, nearest
+         * first, mirroring the left-hand check. */
         for (int i = 1; i <= 8; i++)
-            if (dot(G.shot_x + 8 + i, G.shot_y) != 0)
+            if (dot(settings.spear_far_check ? G.shot_x + 8 + i : G.shot_x + 8 - i, G.shot_y) != 0)
                 G.shot = false;
     }
     if (G.shot) {

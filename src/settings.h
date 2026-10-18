@@ -45,6 +45,8 @@ typedef struct {
     int solid_pickups; /* gameplay.solid_pickups: pickups block movement until touched */
     int pixel_hits;    /* gameplay.pixel_hits: enemies, darts and spikes kill only when their
                           pixels touch the player's, instead of the original's hit boxes */
+    int spear_far_check; /* gameplay.spear_far_check: facing right, a throw is refused if
+                            anything is 9-16 px past the spear's tip, as in the original */
 
     /* menus (enhancement) */
     int navigation; /* menu.navigation: a cursor on the main menu (arrows, d-pad, mouse),

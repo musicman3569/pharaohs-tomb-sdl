@@ -15,18 +15,22 @@
 /* ------------------------------------------------------------------------------------------ */
 /* Custom sprites                                                                             */
 
-/* The layout tools/extract_gfx.py writes: per set, 4 frames side by side in 24x24 cells with a
- * 1-px grid round them (101 x 26), times the zoom. A frame's picture starts at the cell's top
- * left. */
+/* Two layouts, both one file per set with its 4 frames side by side, times a zoom:
+ *   compact  16x16 frames edge to edge (64 x 16), as tools/sprite_custom.py writes them
+ *   padded   24x24 cells with a 1-px grid round them (101 x 26), as tools/extract_gfx.py writes
+ *            them; a frame's picture starts at its cell's top left
+ * Every frame in the game is 16x16. */
+#define FRAME 16
 #define CELL 24
-#define STRIP_W (SPRITE_FRAMES * (CELL + 1) + 1)
-#define STRIP_H (CELL + 2)
+#define PADDED_W (SPRITE_FRAMES * (CELL + 1) + 1)
+#define PADDED_H (CELL + 2)
 #define MAX_ZOOM 8
 
 static struct {
     uint32_t *px; /* NULL if this set has no custom art */
     int w;        /* the image's width (stride) */
     int zoom;     /* image pixels per game pixel */
+    bool padded;  /* extract_gfx.py's layout */
     bool alpha;   /* the file has transparency; otherwise black is see-through on moving things */
 } art[SPRITE_SETS];
 static int art_sets, art_zoom; /* sets loaded, the largest zoom */
@@ -51,10 +55,12 @@ static int load_set(int set, const char *path)
         fprintf(stderr, "ptomb: %s\n", err);
         return 0;
     }
-    const int zoom = w / STRIP_W;
-    if (zoom < 1 || zoom > MAX_ZOOM || w != STRIP_W * zoom || h != STRIP_H * zoom) {
-        fprintf(stderr, "ptomb: %s is %dx%d; a sprite set is %dx%d times a zoom of 1 to %d\n", path, w, h,
-                STRIP_W, STRIP_H, MAX_ZOOM);
+    const bool padded = w % PADDED_W == 0 && h == w / PADDED_W * PADDED_H;
+    const int zoom = padded ? w / PADDED_W : w / (SPRITE_FRAMES * FRAME);
+    if (zoom < 1 || zoom > MAX_ZOOM || (!padded && (w != SPRITE_FRAMES * FRAME * zoom || h != FRAME * zoom))) {
+        fprintf(stderr, "ptomb: %s is %dx%d; a sprite set is %dx%d times a zoom of 1 to %d (or %dx%d times one, "
+                        "extract_gfx.py's layout)\n",
+                path, w, h, SPRITE_FRAMES * FRAME, FRAME, MAX_ZOOM, PADDED_W, PADDED_H);
         free(px);
         return 0;
     }
@@ -62,6 +68,7 @@ static int load_set(int set, const char *path)
     art[set].px = px;
     art[set].w = w;
     art[set].zoom = zoom;
+    art[set].padded = padded;
     art[set].alpha = alpha != 0;
     return 1;
 }
@@ -76,7 +83,8 @@ int render_load_sprites(const char *dir, const char *base, int volume)
     for (int s = 0; s < SPRITE_SETS; s++) {
         free(art[s].px);
         art[s].px = NULL;
-        /* volN/ first, then the folder itself; setNN.png or extract_gfx.py's setNN_dsXXXX.png */
+        /* volN/ first, then the folder itself; setNN.png (sprite_custom.py) or extract_gfx.py's
+         * setNN_dsXXXX.png */
         char names[4][700];
         snprintf(names[0], sizeof names[0], "%s/vol%d/set%02d.png", root, volume, s);
         snprintf(names[1], sizeof names[1], "%s/vol%d/set%02d_ds%04x.png", root, volume, s, s * SPRITE_SET_BYTES);
@@ -101,7 +109,8 @@ bool render_custom(void)
     return settings.sprites && art_sets > 0;
 }
 
-/* The custom picture for sprite tag `tag`, or NULL. *x0, *y0: its frame's top left. */
+/* The custom picture for sprite tag `tag`, or NULL. *x0, *y0: its frame's top left; the frame
+ * covers FRAME x FRAME game pixels. */
 static const uint32_t *art_frame(int tag, int *stride, int *zoom, int *x0, int *y0)
 {
     if (!render_custom() || tag < 1 || tag > SPRITE_SETS * SPRITE_FRAMES)
@@ -111,8 +120,13 @@ static const uint32_t *art_frame(int tag, int *stride, int *zoom, int *x0, int *
         return NULL;
     *stride = art[set].w;
     *zoom = art[set].zoom;
-    *x0 = art[set].zoom * (1 + frame * (CELL + 1));
-    *y0 = art[set].zoom;
+    if (art[set].padded) {
+        *x0 = art[set].zoom * (1 + frame * (CELL + 1));
+        *y0 = art[set].zoom;
+    } else {
+        *x0 = art[set].zoom * FRAME * frame;
+        *y0 = 0;
+    }
     return art[set].px;
 }
 
@@ -161,7 +175,7 @@ const uint32_t *render_pic_argb(const uint8_t *pic, int *w_out, int *h_out)
     static uint32_t out[CELL * MAX_ZOOM * CELL * MAX_ZOOM];
     const int w = pic_w(pic), h = pic_h(pic);
     int stride, zoom, x0, y0;
-    const uint32_t *a = w <= CELL && h <= CELL ? art_frame(g3_pic_tag(pic), &stride, &zoom, &x0, &y0) : NULL;
+    const uint32_t *a = w <= FRAME && h <= FRAME ? art_frame(g3_pic_tag(pic), &stride, &zoom, &x0, &y0) : NULL;
     if (a) {
         const bool alpha = art[(g3_pic_tag(pic) - 1) / SPRITE_FRAMES].alpha;
         for (int y = 0; y < h * zoom; y++)
@@ -349,19 +363,77 @@ static void bridge_poles(const scene_obj_t *o, float shown_y)
 }
 
 /* The background at `scale`, from idx / tags / tpos. */
+/* Leftovers. A sprite moving 1-6 px is drawn again at its new place, and the strip it moved off
+ * isn't drawn over: those pixels still say "this sprite, this column". The originals are black
+ * there (their margins), so nothing shows; custom art reaching into the margin (a wider hat brim)
+ * would leave a trail. So a pixel only shows the custom art where the game drew it black if most
+ * of the picture it came from is still on screen. Each placement (sprite, top left) is counted
+ * once per rebuild in a small hash table. */
+#define PLACEMENTS 8192
+static struct {
+    uint32_t key; /* 0 = empty */
+    int count;
+} placement[PLACEMENTS];
+
+static uint32_t placement_key(int x, int y)
+{
+    const int ox = x - (tpos[y][x] & 0xFF), oy = y - (tpos[y][x] >> 8); /* -23..319, -23..199 */
+    return (uint32_t)tags[y][x] | (uint32_t)(ox + 32) << 8 | (uint32_t)(oy + 32) << 18;
+}
+
+static int *placement_count(uint32_t key)
+{
+    for (uint32_t h = key * 2654435761u >> 19, n = 0; n < PLACEMENTS; h = (h + 1) % PLACEMENTS, n++) {
+        if (placement[h].key == key)
+            return &placement[h].count;
+        if (placement[h].key == 0) {
+            placement[h].key = key;
+            placement[h].count = 0;
+            return &placement[h].count;
+        }
+    }
+    return NULL; /* full: treat every placement as whole */
+}
+
+static void count_placements(void)
+{
+    memset(placement, 0, sizeof placement);
+    for (int y = 0; y < CGA_H; y++)
+        for (int x = 0; x < CGA_W; x++)
+            if (tags[y][x] >= 1 && tags[y][x] <= SPRITE_SETS * SPRITE_FRAMES) {
+                int *n = placement_count(placement_key(x, y));
+                if (n)
+                    (*n)++;
+            }
+}
+
+/* Is at least half of the on-screen part of the picture pixel (x, y) came from still there? */
+static bool placement_whole(int x, int y)
+{
+    const int *n = placement_count(placement_key(x, y));
+    if (!n)
+        return true;
+    const int ox = x - (tpos[y][x] & 0xFF), oy = y - (tpos[y][x] >> 8);
+    const int w = (ox + FRAME > CGA_W ? CGA_W : ox + FRAME) - (ox < 0 ? 0 : ox);
+    const int h = (oy + FRAME > CGA_H ? CGA_H : oy + FRAME) - (oy < 0 ? 0 : oy);
+    return *n * 2 >= w * h;
+}
+
 static void build_background(uint32_t *bg, int scale)
 {
     const int W = CGA_W * scale;
     uint32_t lut[4];
     for (int c = 0; c < 4; c++)
         lut[c] = cga_argb(c);
+    if (render_custom())
+        count_placements();
     for (int y = 0; y < CGA_H; y++)
         for (int x = 0; x < CGA_W; x++) {
             uint32_t *o = bg + (size_t)y * scale * W + (size_t)x * scale;
             int stride, zoom, x0, y0;
             const uint32_t *a = art_frame(tags[y][x], &stride, &zoom, &x0, &y0);
             const int col = tpos[y][x] & 0xFF, row = tpos[y][x] >> 8;
-            if (a && col < CELL && row < CELL) {
+            if (a && col < FRAME && row < FRAME && (idx[y][x] != 0 || placement_whole(x, y))) {
                 for (int sy = 0; sy < scale; sy++)
                     for (int sx = 0; sx < scale; sx++) {
                         const uint32_t c = a[(y0 + row * zoom + sy * zoom / scale) * stride + x0 + col * zoom + sx * zoom / scale];

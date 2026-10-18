@@ -45,6 +45,9 @@ static const struct {
     {"gameplay.pixel_hits", T_BOOL, offsetof(settings_t, pixel_hits), 0, 1, 0, 1,
      "enemies, darts and spikes kill you only when their pixels touch the explorer's. Off = the\n"
      "; original's hit boxes, which reach a few pixels past most of the pictures"},
+    {"gameplay.spear_far_check", T_BOOL, offsetof(settings_t, spear_far_check), 0, 1, 1, 0,
+     "facing right, a spear isn't thrown if a wall or enemy is 9-16 pixels past its tip, as in\n"
+     "; the original (facing left only the spear's own pixels count). Off = both ways alike"},
     {"menu.navigation", T_BOOL, offsetof(settings_t, navigation), 0, 1, 0, 1,
      "main menu cursor: arrows / d-pad / mouse move it, Enter / Space / A / click choose; clicks\n"
      "; also work as a key on \"press any key\" screens. Off = the original's letter keys only"},

@@ -149,6 +149,10 @@ default), and **enhanced**, which switches on every enhancement. So far that is:
   the original a walker coming from the right turned around on your hat and never killed
   you). Where pictures overlap, their black backgrounds are see-through, so neither cuts
   holes in the other. Spear hits on monsters keep the original's generous box.
+- **Spears throw the same both ways** (`gameplay.spear_far_check = off`): in the original,
+  facing right, a throw silently does nothing if a wall or a monster is 9-16 pixels past the
+  spear's tip (facing left only the spear's own path counts). On level 1, landing beside the
+  shaft and pressing fire did nothing, and a monster close on your right couldn't be speared.
 - **Main menu cursor** (`menu.navigation`): a highlight you move with the arrow keys, the
   d-pad or the mouse, and choose with Enter, Space, A or a click. The letter keys still work.
   Clicks also count as a key on "press any key" screens. (In classic, as in the original,
@@ -183,54 +187,46 @@ joystick = on         ; start with the controller on (the original started with 
 [gameplay]
 solid_pickups = on    ; pickups block you until touched, as in the original (off in enhanced)
 pixel_hits = off      ; kill only on touching pixels, not the original's hit boxes (on in enhanced)
+spear_far_check = on  ; facing right, things past the spear's tip block a throw (off in enhanced)
 
 [menu]
 navigation = off      ; the main menu cursor (on in enhanced)
 ```
 
 `ptomb --print-settings > ptomb.ini` writes a complete file with every setting explained.
+The command line overrides the file: `--set display.palette=1`, for example. F1-F5 and F11
+change the display settings for the current run only.
 
 ### Custom sprites
 
 With `display.sprites` on (enhanced), the port draws every sprite (tiles, items, enemies, the
 explorer) from PNG files in a `sprites` folder next to `ptomb.exe` (or `display.sprite_dir`).
-Each file is one of the game's 40 sprite sets, in the layout `tools/extract_gfx.py` writes, so
-the easiest start is to extract the originals and edit them:
+Each file is one of the game's 40 sprite sets: its 4 animation frames side by side, 16x16 each,
+nothing else (64 x 16 pixels). That's a plain sprite sheet on a 16x16 grid, ready for Aseprite
+or any pixel art editor. `tools/sprite_custom.py` writes the game's own sprites that way to start
+from, from your `PTOMBn.EXE` (packed or not):
 
 ```
-python tools/extract_gfx.py sprites unpacked/PTOMB1.EXE build/sprites --palette 0
+python tools/sprite_custom.py game/PTOMB1.EXE build/sprites
+python tools/sprite_custom.py game/PTOMB1.EXE build/sprites --scale 4
 ```
 
-- A file holds a set's 4 frames side by side, each in a 24x24 cell with a 1-pixel border round
-  the cells (101 x 26 pixels), times a whole zoom from 1 to 8. The extracted files are 4 times
-  (404 x 104), so you can draw at 4 times the detail. A 16x16 sprite fills the top-left of its
-  cell. Different sets may use different zooms.
-- Names: `setNN.png` or the extracted `setNN_dsXXXX.png`. A `volN` subfolder (`sprites/vol2`)
-  is looked in first, for art that differs by volume; the game's sprites are the same in all
-  four.
-- Any PNG type works (not interlaced). On moving things, transparent pixels show the
-  background, or black ones if the file has no transparency. On still tiles everything in the
-  cell is drawn, as the game draws its tiles.
+- `--scale N` (2-8) enlarges the sheet with nearest-neighbour so you can draw at N times the
+  detail: `--scale 4` gives 256 x 64 sheets of 64x64 frames. The port works out each file's
+  scale from its size, and sets may differ. `--palette 1` starts from the original's colours,
+  `--sets 0-3,10` writes only some sets, and a folder (or file) of set PNGs instead of the EXE
+  converts or rescales them.
+- Names: `setNN.png` (`set00.png` to `set39.png`). A `volN` subfolder (`sprites/vol2`) is
+  looked in first, for art that differs by volume; the game's sprites are the same in all four.
+- Black (colour 0) comes out transparent. On moving things transparent pixels show the
+  background (in a PNG without transparency, black ones do). On still tiles the whole 16x16
+  cell is drawn, as the game draws its tiles, with transparent as black. Art may reach past the
+  original shape into its black margin (a wider hat brim, say): moving things leave no trail.
+- Any PNG type works (not interlaced). The port also still reads `tools/extract_gfx.py`'s
+  padded layout (24x24 cells with a 1-pixel grid, 101 x 26 times a zoom, `setNN_dsXXXX.png`).
 - Sets without a file keep the CGA colours, and so do text and the title picture.
 - The game still plays on its own 4-colour pictures, so changing a sprite's shape changes how
-  it looks, not where you collide with it. The unedited files look exactly like palette 0.
-
-To redraw sets with an AI image editor, `tools/sprite_ai.py` converts both ways. `split` turns
-set files into 1024x1024 sheets of just the four frames (2x2, no padding or grid), which
-image-edit models handle far better than the wide strips. `join` reads an edited sheet at any
-size, scales each quadrant down to `--zoom` (default 2, twice the original pixels each way),
-makes near-black pixels transparent, and writes `setNN.png` into the sprites folder, where it
-takes precedence over the extracted `setNN_dsXXXX.png`:
-
-```
-python tools/sprite_ai.py split build/sprites --out build/sprites_ai/sheets
-python tools/sprite_ai.py join edited_set00.png --set 0 --out build/sprites
-```
-
-`--clip build/sprites/set00_ds0000.png` also clears anything outside the original sprite's
-pixels, so the new art can't spill past the shape the game collides with.
-The command line overrides the file: `--set display.palette=1`, for example. F1-F5 and F11
-change the display settings for the current run only.
+  it looks, not where you collide with it. The unedited sheets look exactly like palette 0.
 
 ### Command line
 

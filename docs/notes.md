@@ -482,6 +482,18 @@ with the corrected shapes.)
   once more in its own direction.
 - Spear: an 8-px line at `y-8`, moving 4 px per tick of `[7F6C]`, stopped by any non-black pixel
   or the screen edge.
+- **PlayerFire's check is lopsided** (1000:4DF0). Facing left the spear starts at `x-8` and the
+  throw is cancelled if any of `x-7..x` (its own pixels, nearest the explorer) isn't black.
+  Facing right it starts at `x+16` but tests `x+25..x+32` (1000:4E62 adds 8): the 8 pixels *past
+  its tip*. So facing right, anything 9-16 px ahead of the hand silently cancels the throw (the
+  key is used up, no spear spent). Found by the user on volume 1 level 1: walk right off the
+  top ledge, land at (152, 80) beside the shaft, and F does nothing, because the shaft's right
+  wall starts at x = 176. It also means a walker 9-16 px to your right can't be speared, while
+  one on your left can. The port keeps it in classic; `gameplay.spear_far_check = off`
+  (enhanced) tests the spear's own pixels facing right too (`x+16..x+23`, the mirror of the
+  left-hand test). Measured: at (152, 80) enhanced throws (the spear stops at the wall at once);
+  standing at (160, 144) with level 1's walker at x = 189, classic refuses and enhanced kills it
+  (+250).
 - Losing a life restarts the level, and StartLevel restores spears, T count and treasure to
   their values when the level began (score and lives stay).
 - `ShowLevelTitle` (1854:06A5) prints the level's name and waits `48 - level` ticks or a key.
@@ -762,8 +774,10 @@ state traces.
 Plot / Draw lines, or the title PCX; and for a sprite, which of its pixels it is (`cga_tagpos`,
 column | row from the top << 8). GetPic keeps both for what it copies, so PutPic of that buffer
 (the sliding exit door) puts them back, and the pixel_hits overlay plots them too. With custom
-art loaded (`render_load_sprites`: one PNG per set in `extract_gfx.py`'s layout, 4 frames in
-24x24 cells with a 1-px grid, any whole zoom 1-8, read by `png.c`), the background is built at
+art loaded (`render_load_sprites`: one PNG per set, its 4 16x16 frames side by side (64 x 16,
+as `tools/sprite_custom.py` writes them) or in `extract_gfx.py`'s padded layout (24x24 cells
+with a 1-px grid, 101 x 26), either times a whole zoom 1-8, told apart by their shape, read by
+`png.c`), the background is built at
 the largest zoom: a sprite pixel shows the matching zoom x zoom block of its custom picture,
 everything else its CGA colour. Black margins included, as PutPic draws them, so a tile's whole
 cell is the custom art. Moving pictures come from the same art, transparent where the file is
@@ -771,5 +785,15 @@ cell is the custom art. Moving pictures come from the same art, transparent wher
 its tags or the colours change (about 1 frame in 9 in play). Taking a moving picture out by tag
 and place rather than colour also removes its black margin, so art drawn into a sprite's
 margin never leaves a copy behind at the game's position.
+
+**Leftovers.** A sprite that moves 1-6 px is drawn again at its new place, and the strip it moved
+off isn't drawn over, so those pixels keep the old frame's tag and place. The originals are
+black there (their margins), so the game shows nothing, but custom art that reaches into the
+margin (the user's wider hat brim) left a trail behind the explorer, smooth movement or not. So
+where the game's pixel is black, the custom art only shows if at least half of the picture it
+belongs to (the placement: sprite and top-left corner, counted once per background rebuild) is
+still on screen. A stale strip is 1-6 columns or rows of 16; tiles keep their margins' art even
+with the explorer standing in front of them. Non-black pixels always show their art (the poles
+are made of those).
 
 The unedited extracted pal0 files render pixel-identical to palette 0 at 4x.
